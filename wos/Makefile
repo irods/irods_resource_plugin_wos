@@ -6,7 +6,7 @@ HEADERS = curlWosFunctions.h
 
 EXTRALIBS = -L/usr/lib64 -lcurl
 
-EXTRAINCS = 
+EXTRAINCS = -I/usr/include/openssl
 
 ######################################################################
 # General settings below. These should not need to be changed in most

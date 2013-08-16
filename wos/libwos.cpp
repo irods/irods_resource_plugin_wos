@@ -791,29 +791,18 @@ getTheManagementData(char *resource, char *user, char *password,
 }
 #endif
 
-    // =-=-=-=-=-=-=-
-    // Define plugin Version Variable
-    double EIRODS_PLUGIN_INTERFACE_VERSION=1.0;
-
-    // =-=-=-=-=-=-=-
-    // NOTE :: This was a Direct Rip from iRODS/server/drivers/src/unixFileDriver.c 
-    // =-=-=-=-=-=-=-
 // =-=-=-=-=-=-=-
 /// @brief Checks the basic operation parameters and updates the physical path in the file object
-eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
+eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
 
     eirods::error result = SUCCESS();
     eirods::error ret;
 
     // =-=-=-=-=-=-=-
     // check incoming parameters
-    if( !_ctx ) {
-        result = ERROR( SYS_INVALID_INPUT_PARAM, "wosCheckParams - null resource context" );
-    }
-
     // =-=-=-=-=-=-=-
     // verify that the resc context is valid 
-    ret = _ctx->valid();
+    ret = _ctx.valid();
     if( !ret.ok() ) {
         result = PASSMSG( "wosCheckParams - resource context is invalid", ret );
     } 
@@ -824,42 +813,42 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
     
     // =-=-=-=-=-=-=-
     // interface for file registration
-    eirods::error wosRegisteredPlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosRegisteredPlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosRegisteredPlugin" );
     } // wosRegisteredPlugin
 
     // =-=-=-=-=-=-=-
     // interface for file unregistration
-    eirods::error wosUnregisteredPlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosUnregisteredPlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosUnregisteredPlugin" );
     } // wosUnregisteredPlugin
 
     // =-=-=-=-=-=-=-
     // interface for file modification
-    eirods::error wosModifiedPlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosModifiedPlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosModifiedPlugin" );
     } // wosModifiedPlugin
     
     // =-=-=-=-=-=-=-
     // interface for POSIX create
-    eirods::error wosFileCreatePlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosFileCreatePlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileCreatePlugin" );
     } // wosFileCreatePlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Open
-    eirods::error wosFileOpenPlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosFileOpenPlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileOpenPlugin" );
     } // wosFileOpenPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Read
-    eirods::error wosFileReadPlugin( eirods::resource_operation_context* _ctx,
+    eirods::error wosFileReadPlugin( eirods::resource_plugin_context& _ctx,
                                       void*               _buf, 
                                       int                 _len ) {
                                       
@@ -869,7 +858,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Write
-    eirods::error wosFileWritePlugin( eirods::resource_operation_context* _ctx,
+    eirods::error wosFileWritePlugin( eirods::resource_plugin_context& _ctx,
                                        void*               _buf, 
                                        int                 _len ) {
         return ERROR( SYS_NOT_SUPPORTED, "wosFileWritePlugin" );
@@ -878,7 +867,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Close
-    eirods::error wosFileClosePlugin(  eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileClosePlugin(  eirods::resource_plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileClosePlugin" );
         
@@ -886,7 +875,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Unlink
-    eirods::error wosFileUnlinkPlugin( eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileUnlinkPlugin( eirods::resource_plugin_context& _ctx ) {
         int status;
         const char *wos_host;
         WOS_HEADERS theHeaders;
@@ -902,7 +891,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             return PASSMSG(msg.str(), ret);  
         }
         
-        eirods::resource_property_map& prop_map = _ctx->prop_map();
+        eirods::plugin_property_map& prop_map = _ctx.prop_map();
 
         prop_ret = prop_map.get< std::string >( "wos_host", my_host );
         if (!prop_ret.ok()) {
@@ -913,11 +902,11 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         wos_host = my_host.c_str();
 
         // =-=-=-=-=-=-=-
-        // get ref to fco
-        eirods::first_class_object& _object = _ctx->fco();
+        // get ref to data object
+        eirods::data_object& object = dynamic_cast< eirods::data_object& >( _ctx.fco() );
 
         status = 
-         deleteTheFile(wos_host, _object.physical_path().c_str(), &theHeaders);
+         deleteTheFile(wos_host, object.physical_path().c_str(), &theHeaders);
 
         // error handling
         if( status < 0 ) {
@@ -925,7 +914,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             
             std::stringstream msg;
             msg << "wosFileUnlinkPlugin: unlink error for ";
-            msg << _object.physical_path();
+            msg << object.physical_path();
             msg << ", status = ";
             msg << status;
             return ERROR( status, msg.str() );
@@ -936,7 +925,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Stat
-    eirods::error wosFileStatPlugin(  eirods::resource_operation_context* _ctx,
+    eirods::error wosFileStatPlugin(  eirods::resource_plugin_context& _ctx,
                                       struct stat*        _statbuf ) { 
         rodsLong_t len;
         int status;
@@ -955,7 +944,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             return PASSMSG(msg.str(), ret);
         }
 
-        eirods::resource_property_map& prop_map = _ctx->prop_map();
+        eirods::plugin_property_map& prop_map = _ctx.prop_map();
         prop_ret = prop_map.get< std::string >( "wos_host", my_host );
         if (!prop_ret.ok()) {
             std::stringstream msg;
@@ -965,11 +954,11 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         wos_host = my_host.c_str();
 
         // =-=-=-=-=-=-=-
-        // get ref to fco
-        eirods::first_class_object& _object = _ctx->fco();
+        // get ref to data object
+        eirods::data_object& object = dynamic_cast< eirods::data_object& >( _ctx.fco() );
 
        // Call the WOS function
-        status = getTheFileStatus(wos_host, _object.physical_path().c_str(), &theHeaders);
+        status = getTheFileStatus(wos_host, object.physical_path().c_str(), &theHeaders);
 
         // returns non-zero on error.
         if (status) {
@@ -997,7 +986,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Fstat
-    eirods::error wosFileFstatPlugin(  eirods::resource_operation_context* _ctx,
+    eirods::error wosFileFstatPlugin(  eirods::resource_plugin_context& _ctx,
                                        struct stat*        _statbuf ) {
         return ERROR( SYS_NOT_SUPPORTED, "wosFileFstatPlugin" );
                                    
@@ -1005,7 +994,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX lseek
-    eirods::error wosFileLseekPlugin(  eirods::resource_operation_context* _ctx, 
+    eirods::error wosFileLseekPlugin(  eirods::resource_plugin_context& _ctx, 
                                        size_t              _offset, 
                                        int                 _whence ) {
 
@@ -1015,7 +1004,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX fsync
-    eirods::error wosFileFsyncPlugin(  eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileFsyncPlugin(  eirods::resource_plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileFsyncPlugin" );
 
@@ -1023,7 +1012,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    eirods::error wosFileMkdirPlugin(  eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileMkdirPlugin(  eirods::resource_plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileMkdirPlugin" );
 
@@ -1031,35 +1020,28 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    eirods::error wosFileChmodPlugin(  eirods::resource_operation_context* _ctx ) {
-
-        return ERROR( SYS_NOT_SUPPORTED, "wosFileChmodPlugin" );
-    } // wosFileChmodPlugin
-
-    // =-=-=-=-=-=-=-
-    // interface for POSIX mkdir
-    eirods::error wosFileRmdirPlugin(  eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileRmdirPlugin(  eirods::resource_plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileRmdirPlugin" );
     } // wosFileRmdirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX opendir
-    eirods::error wosFileOpendirPlugin( eirods::resource_operation_context* _ctx ) {
+    eirods::error wosFileOpendirPlugin( eirods::resource_plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileOpendirPlugin" );
     } // wosFileOpendirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX closedir
-    eirods::error wosFileClosedirPlugin( eirods::resource_operation_context* _ctx) {
+    eirods::error wosFileClosedirPlugin( eirods::resource_plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileClosedirPlugin" );
     } // wosFileClosedirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    eirods::error wosFileReaddirPlugin( eirods::resource_operation_context* _ctx,
+    eirods::error wosFileReaddirPlugin( eirods::resource_plugin_context& _ctx,
                                         struct rodsDirent**     _dirent_ptr ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileReaddirPlugin" );
@@ -1067,30 +1049,16 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    eirods::error wosFileStagePlugin( eirods::resource_operation_context* _ctx ) {
-
-        return ERROR( SYS_NOT_SUPPORTED, "wosFileStagePlugin" );
-    } // wosFileStagePlugin
-
-    // =-=-=-=-=-=-=-
-    // interface for POSIX readdir
-    eirods::error wosFileRenamePlugin( eirods::resource_operation_context* _ctx,
+    eirods::error wosFileRenamePlugin( eirods::resource_plugin_context& _ctx,
                                        const char*         _new_file_name ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileRenamePlugin" );
     } // wosFileRenamePlugin
 
-    // =-=-=-=-=-=-=-
-    // interface for POSIX truncate
-    eirods::error wosFileTruncatePlugin( 
-       eirods::resource_operation_context* _ctx ) { 
-        return ERROR( SYS_NOT_SUPPORTED, "wosFileTruncatePlugin" );
-    } // wosFileTruncatePlugin
-
     
     // interface to determine free space on a device given a path
     eirods::error wosFileGetFsFreeSpacePlugin(
-        eirods::resource_operation_context* _ctx ){
+        eirods::resource_plugin_context& _ctx ){
 
         eirods::error prop_ret;
         std::string my_admin;
@@ -1112,7 +1080,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             return PASSMSG(msg.str(), ret);
         }
 
-        eirods::resource_property_map& prop_map = _ctx->prop_map();
+        eirods::plugin_property_map& prop_map = _ctx.prop_map();
         prop_ret = prop_map.get< std::string >( "wos_admin_URL", my_admin );
         if (!prop_ret.ok()) {
             std::stringstream msg;
@@ -1152,20 +1120,14 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
 
     } // wosFileGetFsFreeSpacePlugin
 
-    eirods::error wosFileCopyPlugin( int mode, const char *srcFileName, 
-                        const char *destFileName)
-    {
-        return ERROR( SYS_NOT_SUPPORTED, "wosFileCopyPlugin" );
-    }
-
 
     // =-=-=-=-=-=-=-
     // wosStageToCache - This routine is for testing the TEST_STAGE_FILE_TYPE.
     // Just copy the file from filename to cacheFilename. optionalInfo info
     // is not used.
     eirods::error wosStageToCachePlugin(
-        eirods::resource_operation_context* _ctx,
-        char*                               _cache_file_name ) {
+        eirods::resource_plugin_context& _ctx,
+        char*                            _cache_file_name ) {
 
         int status;
         struct stat fileStatus;
@@ -1184,7 +1146,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             return PASSMSG(msg.str(), ret);
         }
 
-        eirods::resource_property_map&  prop_map = _ctx->prop_map();
+        eirods::plugin_property_map&  prop_map = _ctx.prop_map();
 
         prop_ret = prop_map.get< std::string >( "wos_host", my_host );
         if (!prop_ret.ok()) {
@@ -1194,7 +1156,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         }
         wos_host = my_host.c_str();
 
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx->fco() );
+        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
 
         // The old code allows user to set a mode.  We should now be doing this.
         status = getTheFile(wos_host, 
@@ -1225,8 +1187,8 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
     // Just copy the file from cacheFilename to filename. optionalInfo info
     // is not used.
     eirods::error wosSyncToArchPlugin( 
-        eirods::resource_operation_context* _ctx,
-        char*                               _cache_file_name ) {
+        eirods::resource_plugin_context& _ctx,
+        char*                            _cache_file_name ) {
 
         int status;
         struct stat fileStatus;
@@ -1247,7 +1209,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
             return PASSMSG(msg.str(), ret);
         }
 
-        eirods::resource_property_map& prop_map = _ctx->prop_map();
+        eirods::plugin_property_map& prop_map = _ctx.prop_map();
 
         prop_ret = prop_map.get< std::string >( "wos_host", my_host );
         if (!prop_ret.ok()) {
@@ -1265,7 +1227,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         }
         wos_policy = my_policy.c_str();
 
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx->fco() );
+        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
 
         status = putTheFile(wos_host, wos_policy, (const char *)_cache_file_name, &theHeaders);
         // returns non-zero on error.
@@ -1290,7 +1252,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
     // =-=-=-=-=-=-=-
     // redirect_get - code to determine redirection for get operation
     eirods::error wosRedirectCreate( 
-                      eirods::resource_property_map& _prop_map,
+                      eirods::plugin_property_map& _prop_map,
                       eirods::file_object&           _file_obj,
                       const std::string&             _resc_name, 
                       const std::string&             _curr_host, 
@@ -1298,7 +1260,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         // =-=-=-=-=-=-=-
         // determine if the resource is down 
         int resc_status = 0;
-        eirods::error get_ret = _prop_map.get< int >( "status", resc_status );
+        eirods::error get_ret = _prop_map.get< int >( eirods::RESOURCE_STATUS, resc_status );
         if( !get_ret.ok() ) {
             return PASSMSG( "wosRedirectCreate - failed to get 'status' property", get_ret );
         }
@@ -1313,7 +1275,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         // =-=-=-=-=-=-=-
         // get the resource host for comparison to curr host
         std::string host_name;
-        get_ret = _prop_map.get< std::string >( "location", host_name );
+        get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
         if( !get_ret.ok() ) {
             return PASSMSG( "wosRedirectCreate - failed to get 'location' property", get_ret );
         }
@@ -1333,7 +1295,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
     // =-=-=-=-=-=-=-
     // redirect_get - code to determine redirection for get operation
     eirods::error wosRedirectOpen( 
-                      eirods::resource_property_map& _prop_map,
+                      eirods::plugin_property_map& _prop_map,
                       eirods::file_object&           _file_obj,
                       const std::string&             _resc_name, 
                       const std::string&             _curr_host, 
@@ -1341,7 +1303,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         // =-=-=-=-=-=-=-
         // determine if the resource is down 
         int resc_status = 0;
-        eirods::error get_ret = _prop_map.get< int >( "status", resc_status );
+        eirods::error get_ret = _prop_map.get< int >( eirods::RESOURCE_STATUS, resc_status );
         if( !get_ret.ok() ) {
             return PASSMSG( "wosRedirectOpen - failed to get 'status' property", get_ret );
         }
@@ -1356,7 +1318,7 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         // =-=-=-=-=-=-=-
         // get the resource host for comparison to curr host
         std::string host_name;
-        get_ret = _prop_map.get< std::string >( "location", host_name );
+        get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
         if( !get_ret.ok() ) {
             return PASSMSG( "wosRedirectOpen - failed to get 'location' property", get_ret );
         }
@@ -1377,21 +1339,15 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
     // used to allow the resource to determine which host
     // should provide the requested operation
     eirods::error wosRedirectPlugin( 
-        eirods::resource_operation_context* _ctx,
-        const std::string*                  _opr,
-        const std::string*                  _curr_host,
-        eirods::hierarchy_parser*           _out_parser,
-        float*                              _out_vote ) {
+        eirods::resource_plugin_context&  _ctx,
+        const std::string*                _opr,
+        const std::string*                _curr_host,
+        eirods::hierarchy_parser*         _out_parser,
+        float*                            _out_vote ) {
 
         // =-=-=-=-=-=-=-
-        // check the context pointer
-        if( !_ctx ) {
-            return ERROR( SYS_INVALID_INPUT_PARAM, "wosRedirectPlugin - invalid resource context" );
-        }
-         
-        // =-=-=-=-=-=-=-
         // check the context validity
-        eirods::error ret = _ctx->valid< eirods::file_object >(); 
+        eirods::error ret = _ctx.valid< eirods::file_object >(); 
         if(!ret.ok()) {
             std::stringstream msg;
             msg << __FUNCTION__ << " - resource context is invalid";
@@ -1415,12 +1371,12 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         
         // =-=-=-=-=-=-=-
         // cast down the chain to our understood object type
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx->fco() );
+        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
 
         // =-=-=-=-=-=-=-
         // get the name of this resource
         std::string resc_name;
-        ret = _ctx->prop_map().get< std::string >( "name", resc_name );
+        ret = _ctx.prop_map().get< std::string >( eirods::RESOURCE_NAME, resc_name );
         if( !ret.ok() ) {
             std::stringstream msg;
             msg << "wosRedirectPlugin - failed in get property for name";
@@ -1436,12 +1392,12 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         if( eirods::EIRODS_OPEN_OPERATION == (*_opr) ) {
             // =-=-=-=-=-=-=-
             // call redirect determination for 'get' operation
-            return wosRedirectOpen( _ctx->prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
+            return wosRedirectOpen( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
 
         } else if( eirods::EIRODS_CREATE_OPERATION == (*_opr) ) {
             // =-=-=-=-=-=-=-
             // call redirect determination for 'create' operation
-            return wosRedirectCreate( _ctx->prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
+            return wosRedirectCreate( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
         }
       
         // =-=-=-=-=-=-=-
@@ -1524,18 +1480,15 @@ eirods::error wosCheckParams(eirods::resource_operation_context* _ctx ) {
         resc->add_operation( eirods::RESOURCE_OP_UNLINK,       "wosFileUnlinkPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_STAT,         "wosFileStatPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_FSTAT,        "wosFileFstatPlugin" );
+        resc->add_operation( eirods::RESOURCE_OP_LSEEK,        "wosFileLseekPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_FSYNC,        "wosFileFsyncPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_MKDIR,        "wosFileMkdirPlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_CHMOD,        "wosFileChmodPlugin" );
+        resc->add_operation( eirods::RESOURCE_OP_RMDIR,        "wosFileRmdirPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_OPENDIR,      "wosFileOpendirPlugin" );
+        resc->add_operation( eirods::RESOURCE_OP_CLOSEDIR,     "wosFileClosedirPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_READDIR,      "wosFileReaddirPlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_STAGE,        "wosFileStagePlugin" );
         resc->add_operation( eirods::RESOURCE_OP_RENAME,       "wosFileRenamePlugin" );
         resc->add_operation( eirods::RESOURCE_OP_FREESPACE,    "wosFileGetFsFreeSpacePlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_LSEEK,        "wosFileLseekPlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_RMDIR,        "wosFileRmdirPlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_CLOSEDIR,     "wosFileClosedirPlugin" );
-        resc->add_operation( eirods::RESOURCE_OP_TRUNCATE,     "wosFileTruncatePlugin" );
         resc->add_operation( eirods::RESOURCE_OP_STAGETOCACHE, "wosStageToCachePlugin" );
         resc->add_operation( eirods::RESOURCE_OP_SYNCTOARCH,   "wosSyncToArchPlugin" );
         resc->add_operation( eirods::RESOURCE_OP_REGISTERED,   "wosRegisteredPlugin" );
