@@ -795,7 +795,6 @@ getTheManagementData(char *resource, char *user, char *password,
 /// @brief Checks the basic operation parameters and updates the physical path in the file object
 eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
 
-    eirods::error result = SUCCESS();
     eirods::error ret;
 
     // =-=-=-=-=-=-=-
@@ -803,13 +802,9 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
     // =-=-=-=-=-=-=-
     // verify that the resc context is valid 
     ret = _ctx.valid();
-    if( !ret.ok() ) {
-        result = PASSMSG( "wosCheckParams - resource context is invalid", ret );
-    } 
+    return ( ASSERT_PASS(ret, "wosCheckParams - resource context is invalid"));
 
-    return result;
-
-} // unix_check_params_and_path
+} // wosCheckParams
     
     // =-=-=-=-=-=-=-
     // interface for file registration
@@ -881,46 +876,34 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
         WOS_HEADERS theHeaders;
         eirods::error prop_ret;
         std::string my_host;
+        eirods::error result = SUCCESS();
 
         // =-=-=-=-=-=-=-
         // check incoming parameters
         eirods::error ret = wosCheckParams( _ctx );
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - Invalid parameters or physical path.";
-            return PASSMSG(msg.str(), ret);  
-        }
+        if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
         
-        eirods::plugin_property_map& prop_map = _ctx.prop_map();
+           eirods::plugin_property_map& prop_map = _ctx.prop_map();
+   
+           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
+              wos_host = my_host.c_str();
+      
+              // =-=-=-=-=-=-=-
+              // get ref to data object
+              eirods::data_object_ptr object = boost::dynamic_pointer_cast< eirods::data_object >( _ctx.fco() );
+      
+              status = 
+               deleteTheFile(wos_host, object->physical_path().c_str(), &theHeaders);
 
-        prop_ret = prop_map.get< std::string >( "wos_host", my_host );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_host.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_host = my_host.c_str();
-
-        // =-=-=-=-=-=-=-
-        // get ref to data object
-        eirods::data_object& object = dynamic_cast< eirods::data_object& >( _ctx.fco() );
-
-        status = 
-         deleteTheFile(wos_host, object.physical_path().c_str(), &theHeaders);
-
-        // error handling
-        if( status < 0 ) {
-            status = WOS_UNLINK_ERR;
-            
-            std::stringstream msg;
-            msg << "wosFileUnlinkPlugin: unlink error for ";
-            msg << object.physical_path();
-            msg << ", status = ";
-            msg << status;
-            return ERROR( status, msg.str() );
+              // error handling
+              if( status < 0 ) {
+                  result =  ERROR( WOS_UNLINK_ERR, "wosFileUnlinkPlugin - error in deleteTheFile");
+              }
+           }
         }
 
-        return CODE( status );
+        return result;
     } // wosFileUnlinkPlugin
 
     // =-=-=-=-=-=-=-
@@ -928,59 +911,52 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
     eirods::error wosFileStatPlugin(  eirods::resource_plugin_context& _ctx,
                                       struct stat*        _statbuf ) { 
         rodsLong_t len;
-        int status;
+        int status = 0;
         const char *wos_host;
         const char *wosPolicy;
         WOS_HEADERS theHeaders;
         eirods::error prop_ret;
         std::string my_host;
+        eirods::error result = SUCCESS();
 
         // =-=-=-=-=-=-=-
         // check incoming parameters
         eirods::error ret = wosCheckParams( _ctx );
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - Invalid parameters or physical path.";
-            return PASSMSG(msg.str(), ret);
+        if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+
+           eirods::plugin_property_map& prop_map = _ctx.prop_map();
+           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           if((result = ASSERT_PASS(prop_ret, " - prop_map has no wos_host")).ok()) {
+              wos_host = my_host.c_str();
+      
+              // =-=-=-=-=-=-=-
+              // get ref to data object
+              eirods::data_object_ptr object = boost::dynamic_pointer_cast< eirods::data_object >( _ctx.fco() );
+      
+             // Call the WOS function
+              status = getTheFileStatus(wos_host, object->physical_path().c_str(), &theHeaders);
+      
+              // returns non-zero on error.
+              if (!status) {
+                 // This is the info we want.
+                 len = theHeaders.x_ddn_length;
+             
+                 // Fill in the rest of the struct.  Note that this code is carried over
+                 // from the original code.
+                 if (len >= 0) {
+                    _statbuf->st_mode = S_IFREG;
+                    _statbuf->st_nlink = 1;
+                    _statbuf->st_uid = getuid ();
+                    _statbuf->st_gid = getgid ();
+                    _statbuf->st_atime = _statbuf->st_mtime = _statbuf->st_ctime = time(0);
+                    _statbuf->st_size = len;
+                 }
+              } else {
+                result =  ERROR( status, "wosFileStatPlugin - error in getTheFileStatus");
+              } 
+           }
         }
-
-        eirods::plugin_property_map& prop_map = _ctx.prop_map();
-        prop_ret = prop_map.get< std::string >( "wos_host", my_host );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_host.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_host = my_host.c_str();
-
-        // =-=-=-=-=-=-=-
-        // get ref to data object
-        eirods::data_object& object = dynamic_cast< eirods::data_object& >( _ctx.fco() );
-
-       // Call the WOS function
-        status = getTheFileStatus(wos_host, object.physical_path().c_str(), &theHeaders);
-
-        // returns non-zero on error.
-        if (status) {
-           return ERROR( status, "wosFileStatPlugin - error in getTheFileStatus");
-        }
-    
-        // This is the info we want.
-        len = theHeaders.x_ddn_length;
-    
-        // Fill in the rest of the struct.  Note that this code is carried over
-        // from the original code.
-        if (len >= 0) {
-           _statbuf->st_mode = S_IFREG;
-           _statbuf->st_nlink = 1;
-           _statbuf->st_uid = getuid ();
-           _statbuf->st_gid = getgid ();
-           _statbuf->st_atime = _statbuf->st_mtime = _statbuf->st_ctime = time(0);
-           _statbuf->st_size = len;
-        }
-
-
-        return CODE( status );
+        return result;
 
     } // wosFileStatPlugin
 
@@ -1070,53 +1046,51 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
         const char *wos_password;
         WOS_STATISTICS theStats;
         rodsLong_t spaceInBytes;
+        eirods::error result = SUCCESS();
        
         // =-=-=-=-=-=-=-
         // check incoming parameters
-        eirods::error ret = wosCheckParams( _ctx );
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - Invalid parameters or physical path.";
-            return PASSMSG(msg.str(), ret);
-        }
+        do {
+           eirods::error ret = wosCheckParams( _ctx );
+           if(!(result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+              continue;
+           } 
 
-        eirods::plugin_property_map& prop_map = _ctx.prop_map();
-        prop_ret = prop_map.get< std::string >( "wos_admin_URL", my_admin );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_admin_URL.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_admin = my_admin.c_str();
+           eirods::plugin_property_map& prop_map = _ctx.prop_map();
+           prop_ret = prop_map.get< std::string >( "wos_admin_URL", my_admin );
+           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_url")).ok()) {
+              continue;
+           }
+           wos_admin = my_admin.c_str();
+   
+           prop_ret = prop_map.get< std::string >( "wos_admin_user", my_user );
+           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_user")).ok()) {
+               continue;
+           }
+           wos_user = my_user.c_str();
+   
+           prop_ret = prop_map.get< std::string >( "wos_admin_password", my_password );
+           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_password")).ok()) {
+               continue;
+           }
+           wos_password = my_password.c_str();
+   
+           status = getTheManagementData(wos_admin, wos_user, wos_password, &theStats);
+   
+           // returns non-zero on error.
+           if (status) {
+              result =  ERROR( status, 
+                 "wosFileGetFsFreeSpacePlugin - error in getTheManagementData");
+              continue;
+           }
+   
+           // Units are in Gb 
+           spaceInBytes = theStats.usableCapacity - theStats.capacityUsed;
+           spaceInBytes *= 1073741824;
+           result.code(spaceInBytes);
+        } while (NULL);
 
-        prop_ret = prop_map.get< std::string >( "wos_admin_user", my_user );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_admin_user.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_user = my_user.c_str();
-
-        prop_ret = prop_map.get< std::string >( "wos_admin_password", my_password );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_admin_password.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_password = my_password.c_str();
-
-        status = getTheManagementData(wos_admin, wos_user, wos_password, &theStats);
-
-        // returns non-zero on error.
-        if (status) {
-           return ERROR( status, 
-              "wosFileGetFsFreeSpacePlugin - error in getTheManagementData");
-        }
-
-        // Units are in Gb 
-        spaceInBytes = theStats.usableCapacity - theStats.capacityUsed;
-        spaceInBytes *= 1073741824;
-        return CODE( spaceInBytes );
+        return result;
 
     } // wosFileGetFsFreeSpacePlugin
 
@@ -1137,49 +1111,48 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
         eirods::error prop_ret;
         std::string my_host;
         std::ostringstream out_stream;
+        eirods::error result = SUCCESS();
 
         // check incoming parameters
         eirods::error ret = wosCheckParams( _ctx );
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - Invalid parameters or physical path.";
-            return PASSMSG(msg.str(), ret);
+        if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+           eirods::plugin_property_map&  prop_map = _ctx.prop_map();
+
+           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) { 
+              wos_host = my_host.c_str();
+      
+              eirods::file_object_ptr file_obj = boost::dynamic_pointer_cast< eirods::file_object >( _ctx.fco() );
+      
+              // The old code allows user to set a mode.  We should now be doing this.
+              status = getTheFile(wos_host, 
+                                  file_obj->physical_path().c_str(), 
+                                  _cache_file_name, 
+                                  file_obj->mode(), 
+                                  &theHeaders);
+
+              // returns non-zero on error.
+              if (!status) {
+                 // Now, lets check to make sure we have the right file length.
+                 if (!stat(_cache_file_name, &fileStatus)){
+                    // we are able to stat the file
+                    if (fileStatus.st_size != file_obj->size()) {
+                        // File is the wrong size
+                        out_stream << "wosStageToCachePlugin length mismatch: expected: " 
+                                   << file_obj->size() << " got " << fileStatus.st_size;
+                        result =  ERROR( SYS_COPY_LEN_ERR, out_stream.str() );
+                    }
+                 } else {
+                     // stat of file failed
+                     result = ERROR( UNIX_FILE_STAT_ERR - errno, "stat of source file failed");
+                 }
+              } else {
+                 // get the file failed
+                 result =  ERROR( status, "wosStageToCachePlugin - error in getTheFile");
+              } // non-zero status
+           }
         }
-
-        eirods::plugin_property_map&  prop_map = _ctx.prop_map();
-
-        prop_ret = prop_map.get< std::string >( "wos_host", my_host );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_host.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_host = my_host.c_str();
-
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
-
-        // The old code allows user to set a mode.  We should now be doing this.
-        status = getTheFile(wos_host, 
-                            file_obj.physical_path().c_str(), 
-                            _cache_file_name, 
-                            file_obj.mode(), 
-                            &theHeaders);
-        // returns non-zero on error.
-        if (status) {
-           return ERROR( status, "wosStageToCachePlugin - error in getTheFile");
-        }
-
-        // Now, lets check to make sure we have the right file length.
-        if (stat(_cache_file_name, &fileStatus)){
-            return ERROR( UNIX_FILE_STAT_ERR - errno, "stat of source file failed");
-        }
-
-        if (fileStatus.st_size != file_obj.size()) {
-            out_stream << "wosStageToCachePlugin length mismatch: expected: " 
-                       << file_obj.size() << " got " << fileStatus.st_size;
-            return ERROR( SYS_COPY_LEN_ERR, out_stream.str() );
-        }
-        return CODE( status );
+        return result;
     } // wosStageToCachePlugin
 
     // =-=-=-=-=-=-=-
@@ -1200,95 +1173,83 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
         std::string my_host;
         std::string my_policy;
         std::ostringstream out_stream;
+        eirods::error result = SUCCESS();
 
         // check incoming parameters
         eirods::error ret = wosCheckParams( _ctx );
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - Invalid parameters or physical path.";
-            return PASSMSG(msg.str(), ret);
+        if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+           eirods::plugin_property_map& prop_map = _ctx.prop_map();
+           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+
+           if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
+              wos_host = my_host.c_str();
+              prop_ret = prop_map.get< std::string >( "wos_policy", my_policy );
+      
+              if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
+                 wos_policy = my_policy.c_str();
+                 eirods::file_object_ptr file_obj = boost::dynamic_pointer_cast< eirods::file_object >( _ctx.fco() );
+
+                 status = putTheFile(wos_host, wos_policy, (const char *)_cache_file_name, &theHeaders);
+                 // returns non-zero on error.
+                 if (!status) {
+                    if (!file_obj->physical_path().find(eirods::EMPTY_RESC_PATH)) {
+                        // delete the file corresponding to the existing OID
+                        status = deleteTheFile(wos_host, file_obj->physical_path().c_str(), &deleteHeaders);
+                    }
+         
+                    // We want to set the new physical path no matter even if the delete failed.
+                    file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
+                    if (status) {
+                        result = ERROR( status, "wosSyncToArchPlugin - error in deleteTheFile");
+                    }      
+                 } else {
+                     result =  ERROR( status, "wosSyncToArchPlugin - error in putTheFile");
+                 }
+              }
+           }
         }
-
-        eirods::plugin_property_map& prop_map = _ctx.prop_map();
-
-        prop_ret = prop_map.get< std::string >( "wos_host", my_host );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_host.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_host = my_host.c_str();
-
-        prop_ret = prop_map.get< std::string >( "wos_policy", my_policy );
-        if (!prop_ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - prop_map has no wos_policy.";
-            return ERROR( -1, msg.str() );
-        }
-        wos_policy = my_policy.c_str();
-
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
-
-        status = putTheFile(wos_host, wos_policy, (const char *)_cache_file_name, &theHeaders);
-        // returns non-zero on error.
-        if (status) {
-            return ERROR( status, "wosSyncToArchPlugin - error in putTheFile");
-        }
-
-        if (!file_obj.physical_path().find(eirods::EMPTY_RESC_PATH)) {
-            // delete the file corresponding to the existing OID
-            status = deleteTheFile(wos_host, file_obj.physical_path().c_str(), &deleteHeaders);
-        }
-
-        // We want to set the new physical path no matter what.
-        file_obj.physical_path(std::string(theHeaders.x_ddn_oid));
-        if (status) {
-            return ERROR( status, "wosSyncToArchPlugin - error in deleteTheFile");
-        } else {
-            return CODE( status );
-        }      
+        return result;
     } // wosSyncToArchPlugin
 
     // =-=-=-=-=-=-=-
     // redirect_get - code to determine redirection for get operation
     eirods::error wosRedirectCreate( 
                       eirods::plugin_property_map& _prop_map,
-                      eirods::file_object&           _file_obj,
+                      eirods::file_object_ptr        _file_obj,
                       const std::string&             _resc_name, 
                       const std::string&             _curr_host, 
                       float&                         _out_vote ) {
+
+        eirods::error result = SUCCESS();
+
         // =-=-=-=-=-=-=-
         // determine if the resource is down 
         int resc_status = 0;
+
         eirods::error get_ret = _prop_map.get< int >( eirods::RESOURCE_STATUS, resc_status );
-        if( !get_ret.ok() ) {
-            return PASSMSG( "wosRedirectCreate - failed to get 'status' property", get_ret );
-        }
+        if((result = ASSERT_PASS(get_ret, "wosRedirectCreate - failed to get 'status' property")).ok()) {
 
-        // =-=-=-=-=-=-=-
-        // if the status is down, vote no.
-        if( INT_RESC_STATUS_DOWN == resc_status ) {
-            _out_vote = 0.0;
-            return SUCCESS(); 
+           // =-=-=-=-=-=-=-
+           // if the status is down, vote no.
+           if( INT_RESC_STATUS_DOWN == resc_status ) {
+               _out_vote = 0.0;
+           } else {
+   
+              // =-=-=-=-=-=-=-
+              // get the resource host for comparison to curr host
+              std::string host_name;
+              get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
+              if((result = ASSERT_PASS(get_ret, "wosRedirectCreate - failed to get 'location' prop")).ok()) {
+                 // vote higher if we are on the same host
+                 if( _curr_host == host_name ) {
+                     _out_vote = 1.0;
+                 } else {
+                     _out_vote = 0.5;
+                 }
+              }
+           }
         }
-
-        // =-=-=-=-=-=-=-
-        // get the resource host for comparison to curr host
-        std::string host_name;
-        get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
-        if( !get_ret.ok() ) {
-            return PASSMSG( "wosRedirectCreate - failed to get 'location' property", get_ret );
-        }
-        
-        // =-=-=-=-=-=-=-
-        // vote higher if we are on the same host
-        if( _curr_host == host_name ) {
-            _out_vote = 1.0;
-        } else {
-            _out_vote = 0.5;
-        }
-
-        return SUCCESS();
+        return result;
 
     } // wosRedirectCreate
 
@@ -1296,42 +1257,42 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
     // redirect_get - code to determine redirection for get operation
     eirods::error wosRedirectOpen( 
                       eirods::plugin_property_map& _prop_map,
-                      eirods::file_object&           _file_obj,
+                      eirods::file_object_ptr        _file_obj,
                       const std::string&             _resc_name, 
                       const std::string&             _curr_host, 
                       float&                         _out_vote ) {
+
+        eirods::error result = SUCCESS();
+
         // =-=-=-=-=-=-=-
         // determine if the resource is down 
         int resc_status = 0;
         eirods::error get_ret = _prop_map.get< int >( eirods::RESOURCE_STATUS, resc_status );
-        if( !get_ret.ok() ) {
-            return PASSMSG( "wosRedirectOpen - failed to get 'status' property", get_ret );
-        }
+        if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - failed to get 'status' property")).ok()) {
 
-        // =-=-=-=-=-=-=-
-        // if the status is down, vote no.
-        if( INT_RESC_STATUS_DOWN == resc_status ) {
-            _out_vote = 0.0;
-            return SUCCESS(); 
-        }
-
-        // =-=-=-=-=-=-=-
-        // get the resource host for comparison to curr host
-        std::string host_name;
-        get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
-        if( !get_ret.ok() ) {
-            return PASSMSG( "wosRedirectOpen - failed to get 'location' property", get_ret );
-        }
-        
-        // =-=-=-=-=-=-=-
-        // vote higher if we are on the same host
-        if( _curr_host == host_name ) {
-            _out_vote = 1.0;
-        } else {
-            _out_vote = 0.5;
-        }
-  
-        return SUCCESS();
+           // =-=-=-=-=-=-=-
+           // if the status is down, vote no.
+           if( INT_RESC_STATUS_DOWN == resc_status ) {
+               _out_vote = 0.0;
+           } else {
+   
+              // =-=-=-=-=-=-=-
+              // get the resource host for comparison to curr host
+              std::string host_name;
+              get_ret = _prop_map.get< std::string >( eirods::RESOURCE_LOCATION, host_name );
+              if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - failed to get 'location' prop")).ok()) {
+              
+                 // =-=-=-=-=-=-=-
+                 // vote higher if we are on the same host
+                 if( _curr_host == host_name ) {
+                     _out_vote = 1.0;
+                 } else {
+                     _out_vote = 0.5;
+                 }
+              }
+           }
+        } 
+        return result;
 
     } // wosRedirectOpen
 
@@ -1345,67 +1306,57 @@ eirods::error wosCheckParams(eirods::resource_plugin_context& _ctx ) {
         eirods::hierarchy_parser*         _out_parser,
         float*                            _out_vote ) {
 
+        eirods::error result = SUCCESS();
+
         // =-=-=-=-=-=-=-
         // check the context validity
         eirods::error ret = _ctx.valid< eirods::file_object >(); 
-        if(!ret.ok()) {
-            std::stringstream msg;
-            msg << __FUNCTION__ << " - resource context is invalid";
-            return PASSMSG( msg.str(), ret );
-        }
- 
-        // =-=-=-=-=-=-=-
-        // check incoming parameters
-        if( !_opr ) {
-            return ERROR( -1, "wosRedirectPlugin - null operation" );
-        }
-        if( !_curr_host ) {
-            return ERROR( -1, "wosRedirectPlugin - null operation" );
-        }
-        if( !_out_parser ) {
-            return ERROR( -1, "wosRedirectPlugin - null outgoing hier parser" );
-        }
-        if( !_out_vote ) {
-            return ERROR( -1, "wosRedirectPlugin - null outgoing vote" );
-        }
-        
-        // =-=-=-=-=-=-=-
-        // cast down the chain to our understood object type
-        eirods::file_object& file_obj = dynamic_cast< eirods::file_object& >( _ctx.fco() );
-
-        // =-=-=-=-=-=-=-
-        // get the name of this resource
-        std::string resc_name;
-        ret = _ctx.prop_map().get< std::string >( eirods::RESOURCE_NAME, resc_name );
-        if( !ret.ok() ) {
-            std::stringstream msg;
-            msg << "wosRedirectPlugin - failed in get property for name";
-            return ERROR( -1, msg.str() );
-        }
-
-        // =-=-=-=-=-=-=-
-        // add ourselves to the hierarchy parser by default
-        _out_parser->add_child( resc_name );
-
-        // =-=-=-=-=-=-=-
-        // test the operation to determine which choices to make
-        if( eirods::EIRODS_OPEN_OPERATION == (*_opr) ) {
-            // =-=-=-=-=-=-=-
-            // call redirect determination for 'get' operation
-            return wosRedirectOpen( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
-
-        } else if( eirods::EIRODS_CREATE_OPERATION == (*_opr) ) {
-            // =-=-=-=-=-=-=-
-            // call redirect determination for 'create' operation
-            return wosRedirectCreate( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote)  );
-        }
+        if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+    
+           // =-=-=-=-=-=-=-
+           // check incoming parameters
+           if( !_opr  ) {
+               result =  ERROR( -1, "wosRedirectPlugin - null operation" );
+           } else if( !_curr_host ) {
+               result =  ERROR( -1, "wosRedirectPlugin - null operation" );
+           } else  if( !_out_parser ) {
+               result =  ERROR( -1, "wosRedirectPlugin - null outgoing hier parser" );
+           } else if( !_out_vote ) {
+               result =  ERROR( -1, "wosRedirectPlugin - null outgoing vote" );
+           } else {
+           
+              // =-=-=-=-=-=-=-
+              // cast down the chain to our understood object type
+              eirods::file_object_ptr file_obj = boost::dynamic_pointer_cast< eirods::file_object >( _ctx.fco() );
       
-        // =-=-=-=-=-=-=-
-        // must have been passed a bad operation or we would have returned by now...
-        std::stringstream msg;
-        msg << "wosRedirectPlugin - operation not supported [";
-        msg << (*_opr) << "]";
-        return ERROR( -1, msg.str() );
+              // =-=-=-=-=-=-=-
+              // get the name of this resource
+              std::string resc_name;
+              ret = _ctx.prop_map().get< std::string >( eirods::RESOURCE_NAME, resc_name );
+              if((result = ASSERT_PASS(ret, "wosRedirectPlugin - failed in get property for name")).ok()) {
+                 // =-=-=-=-=-=-=-
+                 // add ourselves to the hierarchy parser by default
+                 _out_parser->add_child( resc_name );
+         
+                 // =-=-=-=-=-=-=-
+                 // test the operation to determine which choices to make
+                 if( eirods::EIRODS_OPEN_OPERATION == (*_opr) ) {
+                     // =-=-=-=-=-=-=-
+                     // call redirect determination for 'get' operation
+                     result =  
+                        wosRedirectOpen( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote));
+                 } else if( eirods::EIRODS_CREATE_OPERATION == (*_opr) ) {
+                     // =-=-=-=-=-=-=-
+                     // call redirect determination for 'create' operation
+                     result =  
+                        wosRedirectCreate( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote));
+                 } else {
+                   result = ERROR(-1, "wosRedirectPlugin - operation not supported");
+                 }
+              }
+           }
+        } 
+        return result;
 
     } // wosRedirectPlugin
 
