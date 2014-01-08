@@ -8,24 +8,25 @@
 
 // =-=-=-=-=-=-=-
 // irods includes
-#include "msParam.h"
-#include "reGlobalsExtern.h"
-#include "dataObjRepl.h"
-#include "dataObjUnlink.h"
-#include "rodsLog.h"
-#include "icatHighLevelRoutines.h"
+#include "msParam.hpp"
+#include "reGlobalsExtern.hpp"
+#include "dataObjRepl.hpp"
+#include "dataObjUnlink.hpp"
+#include "rodsLog.hpp"
+#include "icatHighLevelRoutines.hpp"
 
 // =-=-=-=-=-=-=-
-// eirods includes
-#include "eirods_resource_plugin.h"
-#include "eirods_file_object.h"
-#include "eirods_collection_object.h"
-#include "eirods_string_tokenize.h"
-#include "eirods_hierarchy_parser.h"
-#include "eirods_resource_backport.h"
-#include "eirods_plugin_base.h"
-#include "eirods_stacktrace.h"
-#include "eirods_resource_constants.h"
+// irods includes
+#include "irods_resource_plugin.hpp"
+#include "irods_file_object.hpp"
+#include "irods_collection_object.hpp"
+#include "irods_string_tokenize.hpp"
+#include "irods_hierarchy_parser.hpp"
+#include "irods_resource_backport.hpp"
+#include "irods_plugin_base.hpp"
+#include "irods_stacktrace.hpp"
+#include "irods_resource_constants.hpp"
+#include "irods_structured_object.hpp"
 
 // =-=-=-=-=-=-=-
 // stl includes
@@ -72,12 +73,12 @@
 
 
 // define some types
-typedef std::vector<eirods::hierarchy_parser> child_list_t;
+typedef std::vector<irods::hierarchy_parser> child_list_t;
 // define this so we sort children from highest vote to lowest
 struct child_comp {
     bool operator()(float _lhs, float _rhs) const { return _lhs > _rhs; }
 };
-typedef std::multimap<float, eirods::hierarchy_parser, child_comp> redirect_map_t;
+typedef std::multimap<float, irods::hierarchy_parser, child_comp> redirect_map_t;
 
 extern "C" {
 
@@ -85,7 +86,7 @@ extern "C" {
     // 1. Define plugin Version Variable, used in plugin
     //    creation when the factory function is called.
     //    -- currently only 1.0 is supported.
-    double EIRODS_PLUGIN_INTERFACE_VERSION=1.0;
+    double IRODS_PLUGIN_INTERFACE_VERSION=1.0;
 
     // =-=-=-=-=-=-=-
     // 2. Define operations which will be called by the file*
@@ -96,27 +97,20 @@ extern "C" {
     // NOTE :: to access properties in the _prop_map do the 
     //      :: following :
     //      :: double my_var = 0.0;
-    //      :: eirods::error ret = _prop_map.get< double >( "my_key", my_var ); 
+    //      :: irods::error ret = _prop_map.get< double >( "my_key", my_var ); 
     // =-=-=-=-=-=-=-
 
     //////////////////////////////////////////////////////////////////////
     // Utility functions
 
     /// @brief Check the general parameters passed in to most plugin functions
-    eirods::error wosCoordCheckParams(eirods::resource_operation_context* _ctx){
-        eirods::error result = SUCCESS();
-        eirods::error ret;
+    irods::error wosCoordCheckParams(irods::resource_plugin_context& _ctx){
+        irods::error result = SUCCESS();
+        irods::error ret;
 
        // =-=-=-=-=-=-=-
-       // check incoming parameters
-       if( !_ctx ) {
-           result = ERROR( SYS_INVALID_INPUT_PARAM, 
-                           "wosCoordCheckParams - null resource context" );
-       }
-    
-       // =-=-=-=-=-=-=-
        // verify that the resc context is valid 
-       ret = _ctx->valid();
+       ret = _ctx.valid();
        if( !ret.ok() ) {
            result = 
             PASSMSG( "wosCoordCheckParams - resource context is invalid", ret );
@@ -128,16 +122,16 @@ extern "C" {
     /**
      * @brief Gets the name of the child of this resource from the hierarchy
      */
-    eirods::error wosCoordGetNextRescInHier(
-        const eirods::hierarchy_parser& _parser,
-        eirods::resource_operation_context* _ctx,
-        eirods::resource_ptr& _ret_resc)
+    irods::error wosCoordGetNextRescInHier(
+        const irods::hierarchy_parser& _parser,
+        irods::resource_plugin_context& _ctx,
+        irods::resource_ptr& _ret_resc)
     {
-        eirods::error result = SUCCESS();
-        eirods::error ret;
+        irods::error result = SUCCESS();
+        irods::error ret;
         std::string this_name;
-        eirods::resource_property_map& prop_map = _ctx->prop_map();
-        eirods::resource_child_map& cmap = _ctx->child_map();
+        irods::plugin_property_map& prop_map = _ctx.prop_map();
+        irods::resource_child_map& cmap = _ctx.child_map();
 
         rodsLog( LOG_NOTICE, "before getting name");
         ret = prop_map.get<std::string>("name", this_name);
@@ -177,17 +171,18 @@ extern "C" {
     
     // =-=-=-=-=-=-=-
     // interface for POSIX create
-    eirods::error wosCoordFileCreate(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileCreate(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
             return PASSMSG("wosCoordFileCreatePlugin - bad params.", ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             rodsLog( LOG_NOTICE, "before calling wosCoordGetNextRescInHier");
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             rodsLog( LOG_NOTICE, "after calling wosCoordGetNextRescInHier");
@@ -197,7 +192,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_CREATE, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_CREATE, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -211,10 +206,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface to notify of a file registration
-    eirods::error wosCoordRegistered(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordRegistered(
+        irods::resource_plugin_context& _ctx ) {
 
-        eirods::error ret;
+        irods::error ret;
 
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -223,9 +218,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -233,7 +229,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_REGISTERED, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_REGISTERED, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -247,10 +243,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface to notify of a file unregistration
-    eirods::error wosCoordUnregistered(
-        eirods::resource_operation_context* _ctx ) { 
+    irods::error wosCoordUnregistered(
+        irods::resource_plugin_context& _ctx ) { 
         
-        eirods::error ret;
+        irods::error ret;
             
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -259,9 +255,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -269,7 +266,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_UNREGISTERED, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_UNREGISTERED, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -283,10 +280,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface to notify of a file modification
-    eirods::error wosCoordModified(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordModified(
+        irods::resource_plugin_context& _ctx ) {
         
-        eirods::error ret;
+        irods::error ret;
             
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -295,9 +292,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -305,7 +303,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_MODIFIED, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_MODIFIED, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -319,10 +317,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Open
-    eirods::error wosCoordFileOpen(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileOpen(
+        irods::resource_plugin_context& _ctx ) {
 
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -331,9 +329,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -341,7 +340,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_OPEN, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_OPEN, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -355,11 +354,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Read
-    eirods::error wosCoordFileRead(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileRead(
+        irods::resource_plugin_context& _ctx,
         void*                               _buf, 
         int                                 _len ) {
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -368,9 +367,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -378,9 +378,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<void*, int>(_ctx->comm(), 
-                                              eirods::RESOURCE_OP_READ,
-                                              _ctx->fco(), 
+                ret = child->call<void*, int>(_ctx.comm(), 
+                                              irods::RESOURCE_OP_READ,
+                                              _ctx.fco(), 
                                               _buf, 
                                               _len);
                 if(!ret.ok()) {
@@ -396,11 +396,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Write
-    eirods::error wosCoordFileWrite(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileWrite(
+        irods::resource_plugin_context& _ctx,
         void*                               _buf, 
         int                                 _len ) {
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -409,9 +409,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -419,9 +420,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<void*, int>(_ctx->comm(), 
-                                              eirods::RESOURCE_OP_WRITE,
-                                              _ctx->fco(), 
+                ret = child->call<void*, int>(_ctx.comm(), 
+                                              irods::RESOURCE_OP_WRITE,
+                                              _ctx.fco(), 
                                               _buf, 
                                               _len);
                 if(!ret.ok()) {
@@ -437,10 +438,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Close
-    eirods::error wosCoordFileClose(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileClose(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -449,9 +450,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -459,7 +461,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_CLOSE, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_CLOSE, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -474,10 +476,10 @@ extern "C" {
     
     // =-=-=-=-=-=-=-
     // interface for POSIX Unlink
-    eirods::error wosCoordFileUnlink(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileUnlink(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -486,9 +488,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -496,7 +499,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_UNLINK, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_UNLINK, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -510,11 +513,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Stat
-    eirods::error wosCoordFileStat(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileStat(
+        irods::resource_plugin_context& _ctx,
         struct stat*                        _statbuf ) { 
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -523,9 +526,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -533,9 +537,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<struct stat*>(_ctx->comm(), 
-                                                eirods::RESOURCE_OP_STAT, 
-                                                _ctx->fco(), 
+                ret = child->call<struct stat*>(_ctx.comm(), 
+                                                irods::RESOURCE_OP_STAT, 
+                                                _ctx.fco(), 
                                                 _statbuf);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -550,11 +554,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Fstat
-    eirods::error wosCoordFileFstat(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileFstat(
+        irods::resource_plugin_context& _ctx,
         struct stat*                        _statbuf ) { 
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -563,9 +567,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -573,9 +578,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<struct stat*>(_ctx->comm(), 
-                                                eirods::RESOURCE_OP_FSTAT, 
-                                                _ctx->fco(), 
+                ret = child->call<struct stat*>(_ctx.comm(), 
+                                                irods::RESOURCE_OP_FSTAT, 
+                                                _ctx.fco(), 
                                                 _statbuf);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -590,12 +595,12 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX lseek
-    eirods::error wosCoordFileLseek(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileLseek(
+        irods::resource_plugin_context& _ctx,
         size_t                              _offset, 
         int                                 _whence ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -604,9 +609,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -614,9 +620,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<size_t, int>(_ctx->comm(), 
-                                               eirods::RESOURCE_OP_LSEEK, 
-                                               _ctx->fco(), 
+                ret = child->call<size_t, int>(_ctx.comm(), 
+                                               irods::RESOURCE_OP_LSEEK, 
+                                               _ctx.fco(), 
                                                _offset, 
                                                _whence);
                 if(!ret.ok()) {
@@ -632,10 +638,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX fsync
-    eirods::error wosCoordFileFsync(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileFsync(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -644,9 +650,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -654,7 +661,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_FSYNC,  _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_FSYNC,  _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -668,10 +675,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    eirods::error wosCoordFileMkdir(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileMkdir(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -680,9 +687,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -690,7 +698,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_MKDIR, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_MKDIR, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -704,10 +712,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    eirods::error wosCoordFileChmod(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileChmod(
+        irods::resource_plugin_context& _ctx ) {
     
-        eirods::error ret;
+        irods::error ret;
 
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -716,9 +724,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -726,7 +735,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_CHMOD, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_CHMOD, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -740,9 +749,9 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    eirods::error wosCoordFileRmdir(
-        eirods::resource_operation_context* _ctx ) {
-        eirods::error ret;
+    irods::error wosCoordFileRmdir(
+        irods::resource_plugin_context& _ctx ) {
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -751,9 +760,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -761,7 +771,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_RMDIR, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_RMDIR, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -775,9 +785,9 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX opendir
-    eirods::error wosCoordFileOpendir(
-        eirods::resource_operation_context* _ctx ) {    
-        eirods::error ret;
+    irods::error wosCoordFileOpendir(
+        irods::resource_plugin_context& _ctx ) {    
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -786,9 +796,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -796,7 +807,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_OPENDIR, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_OPENDIR, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -810,9 +821,9 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX closedir
-    eirods::error wosCoordFileClosedir(
-        eirods::resource_operation_context* _ctx ) {
-        eirods::error ret;
+    irods::error wosCoordFileClosedir(
+        irods::resource_plugin_context& _ctx ) {
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -821,9 +832,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -831,7 +843,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_CLOSEDIR, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_CLOSEDIR, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -845,11 +857,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    eirods::error wosCoordFileReaddir(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileReaddir(
+        irods::resource_plugin_context& _ctx,
         struct rodsDirent**                 _dirent_ptr ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -858,9 +870,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -868,9 +881,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<rodsDirent**>(_ctx->comm(), 
-                                                eirods::RESOURCE_OP_READDIR,
-                                                _ctx->fco(), 
+                ret = child->call<rodsDirent**>(_ctx.comm(), 
+                                                irods::RESOURCE_OP_READDIR,
+                                                _ctx.fco(), 
                                                 _dirent_ptr);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -885,10 +898,10 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    eirods::error wosCoordFileStage(
-        eirods::resource_operation_context* _ctx ) {
+    irods::error wosCoordFileStage(
+        irods::resource_plugin_context& _ctx ) {
  
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -897,9 +910,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -907,7 +921,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_STAGE, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_STAGE, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -921,11 +935,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    eirods::error wosCoordFileRename(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordFileRename(
+        irods::resource_plugin_context& _ctx,
         const char*                         _new_file_name ) {
     
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -934,9 +948,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -944,9 +959,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<const char*>( _ctx->comm(), 
-                                               eirods::RESOURCE_OP_RENAME,
-                                               _ctx->fco(), 
+                ret = child->call<const char*>( _ctx.comm(), 
+                                               irods::RESOURCE_OP_RENAME,
+                                               _ctx.fco(), 
                                                _new_file_name);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -961,11 +976,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX truncate
-    eirods::error wosCoordFileTruncate(
-        eirods::resource_operation_context* _ctx) {
+    irods::error wosCoordFileTruncate(
+        irods::resource_plugin_context& _ctx) {
     
         // =-=-=-=-=-=-=-
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -974,9 +989,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -984,7 +1000,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_TRUNCATE, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_TRUNCATE, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -999,10 +1015,10 @@ extern "C" {
         
     // =-=-=-=-=-=-=-
     // interface to determine free space on a device given a path
-    eirods::error wosCoordFileGetFsFreeSpace(
-        eirods::resource_operation_context* _ctx ) {    
+    irods::error wosCoordFileGetFsFreeSpace(
+        irods::resource_plugin_context& _ctx ) {    
 
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -1011,9 +1027,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -1021,7 +1038,7 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call(_ctx->comm(), eirods::RESOURCE_OP_FREESPACE, _ctx->fco());
+                ret = child->call(_ctx.comm(), irods::RESOURCE_OP_FREESPACE, _ctx.fco());
                 if(!ret.ok()) {
                     std::stringstream msg;
                     msg << __FUNCTION__;
@@ -1037,11 +1054,11 @@ extern "C" {
     // wosCoordStageToCache - This routine is for testing the TEST_STAGE_FILE_TYPE.
     // Just copy the file from filename to cacheFilename. optionalInfo info
     // is not used.
-    eirods::error wosCoordStageToCache(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordStageToCache(
+        irods::resource_plugin_context& _ctx,
         const char*                         _cache_file_name )
     { 
-        eirods::error ret;
+        irods::error ret;
 
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -1050,9 +1067,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -1060,9 +1078,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<const char*>(_ctx->comm(), 
-                                               eirods::RESOURCE_OP_STAGETOCACHE,  
-                                               _ctx->fco(),
+                ret = child->call<const char*>(_ctx.comm(), 
+                                               irods::RESOURCE_OP_STAGETOCACHE,  
+                                               _ctx.fco(),
                                                _cache_file_name);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -1077,11 +1095,11 @@ extern "C" {
 
     // =-=-=-=-=-=-=-
     // The syncToArch operation
-    eirods::error wosCoordSyncToArch(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordSyncToArch(
+        irods::resource_plugin_context& _ctx,
         const char*                    _cache_file_name )
     { 
-        eirods::error ret;
+        irods::error ret;
         
         ret = wosCoordCheckParams(_ctx);
         if(!ret.ok()) {
@@ -1090,9 +1108,10 @@ extern "C" {
             msg << " - bad params.";
             return PASSMSG(msg.str(), ret);
         } else {
-            eirods::hierarchy_parser parser;
-            parser.set_string(_ctx->fco().resc_hier());
-            eirods::resource_ptr child;
+            irods::hierarchy_parser parser;
+            irods::structured_object_ptr fco = boost::dynamic_pointer_cast< irods::structured_object >( _ctx.fco() );
+            parser.set_string(fco->resc_hier());
+            irods::resource_ptr child;
             ret = wosCoordGetNextRescInHier(parser, _ctx, child);
             if(!ret.ok()) {
                 std::stringstream msg;
@@ -1100,9 +1119,9 @@ extern "C" {
                 msg << " - Failed to get the next resource in hierarchy.";
                 return PASSMSG(msg.str(), ret);
             } else {
-                ret = child->call<const char*>(_ctx->comm(), 
-                                               eirods::RESOURCE_OP_SYNCTOARCH, 
-                                               _ctx->fco(), 
+                ret = child->call<const char*>(_ctx.comm(), 
+                                               irods::RESOURCE_OP_SYNCTOARCH, 
+                                               _ctx.fco(), 
                                                _cache_file_name);
                 if(!ret.ok()) {
                     std::stringstream msg;
@@ -1116,11 +1135,11 @@ extern "C" {
     } // wosCoordSyncToArch
 
     /// @brief Adds the current resource to the specified resource hierarchy
-    eirods::error wosCoordAddSelfToHierarchy(
-        eirods::resource_property_map& _prop_map,
-        eirods::hierarchy_parser& _parser)
+    irods::error wosCoordAddSelfToHierarchy(
+        irods::plugin_property_map& _prop_map,
+        irods::hierarchy_parser& _parser)
     {
-        eirods::error ret;
+        irods::error ret;
         std::string name;
         ret = _prop_map.get<std::string>("name", name);
         if(!ret.ok()) {
@@ -1141,27 +1160,27 @@ extern "C" {
     }
 
     /// @brief Loop through the children and call redirect on each one to populate the hierarchy vector
-    eirods::error wosCoordRedirectToChildren(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordRedirectToChildren(
+        irods::resource_plugin_context& _ctx,
         const std::string*                  _operation,
         const std::string*                  _curr_host,
-        eirods::hierarchy_parser&           _parser,
+        irods::hierarchy_parser&           _parser,
         redirect_map_t&                     _redirect_map)
     {
-        eirods::error ret = SUCCESS();
-        eirods::resource_child_map::iterator it;
-        eirods::resource_child_map& cmap = _ctx->child_map();
+        irods::error ret = SUCCESS();
+        irods::resource_child_map::iterator it;
+        irods::resource_child_map& cmap = _ctx.child_map();
         float out_vote;
         for(it = cmap.begin(); ret.ok() && it != cmap.end(); ++it) {
-            eirods::hierarchy_parser parser(_parser);
-            eirods::resource_ptr child = it->second.second;
+            irods::hierarchy_parser parser(_parser);
+            irods::resource_ptr child = it->second.second;
             ret = 
               child->call<const std::string*, 
                           const std::string*, 
-                          eirods::hierarchy_parser*, 
-                          float*>( _ctx->comm(), 
-                                   eirods::RESOURCE_OP_RESOLVE_RESC_HIER, 
-                                   _ctx->fco(), 
+                          irods::hierarchy_parser*, 
+                          float*>( _ctx.comm(), 
+                                   irods::RESOURCE_OP_RESOLVE_RESC_HIER, 
+                                   _ctx.fco(), 
                                    _operation, 
                                    _curr_host, 
                                    &parser, 
@@ -1172,7 +1191,7 @@ extern "C" {
                 msg << " - Failed calling redirect on the child \"" << it->first << "\"";
                 return PASSMSG(msg.str(), ret);
             } else {
-                _redirect_map.insert(std::pair<float, eirods::hierarchy_parser>(out_vote, parser));
+                _redirect_map.insert(std::pair<float, irods::hierarchy_parser>(out_vote, parser));
             }
         }
         return ret;
@@ -1182,12 +1201,12 @@ extern "C" {
     /// was populated based on the child voting: the highest value vote
     /// is the one we want.  If there is a tie, we don't care so taking
     /// the first one is still fine.
-    eirods::error wosCoordSelectChild(
+    irods::error wosCoordSelectChild(
         const std::string& _curr_host,
         const redirect_map_t& _redirect_map,
-        eirods::hierarchy_parser* _out_parser)
+        irods::hierarchy_parser* _out_parser)
     {
-        eirods::error ret = SUCCESS();
+        irods::error ret = SUCCESS();
 
         // pluck the first entry out of the map. Because the map is sorted by
         // vote value, this is the one we want to use.
@@ -1212,22 +1231,18 @@ extern "C" {
     }
 
     /// @brief Determines which child should be used for the specified operation
-    eirods::error wosCoordRedirect(
-        eirods::resource_operation_context* _ctx,
+    irods::error wosCoordRedirect(
+        irods::resource_plugin_context& _ctx,
         const std::string*             _operation,
         const std::string*             _curr_host,
-        eirods::hierarchy_parser*      _inout_parser,
+        irods::hierarchy_parser*      _inout_parser,
         float*                         _out_vote ) {
-        eirods::hierarchy_parser parser = *_inout_parser;
+        irods::hierarchy_parser parser = *_inout_parser;
         redirect_map_t redirect_map;
-
-        if( !_ctx ) {
-            return ERROR( SYS_INVALID_INPUT_PARAM, "wosCoordRedirect - invalid resource context" );
-        }
 
         // =-=-=-=-=-=-=-
         // check the context validity
-        eirods::error ret = _ctx->valid< eirods::file_object >();
+        irods::error ret = _ctx.valid< irods::file_object >();
         if(!ret.ok()) {
             std::stringstream msg;
             msg << __FUNCTION__ << " - resource context is invalid";
@@ -1249,8 +1264,8 @@ extern "C" {
             return ERROR( -1, "wosCoordRedirect - null outgoing vote" );
         }
         
-        eirods::resource_property_map& _prop_map = _ctx->prop_map();
-        eirods::resource_child_map& _cmap = _ctx->child_map();
+        irods::plugin_property_map& _prop_map = _ctx.prop_map();
+        irods::resource_child_map& _cmap = _ctx.child_map();
 
         // add ourselves to the hierarchy parser
         if(!(ret = wosCoordAddSelfToHierarchy(_prop_map, parser)).ok()) {
@@ -1288,18 +1303,18 @@ extern "C" {
     //    necessary to do custom parsing of the context string to place
     //    any useful values into the property map for reference in later
     //    operations.  semicolon is the preferred delimiter
-    class wosCoord_resource : public eirods::resource {
+    class wosCoord_resource : public irods::resource {
 
     public:
         wosCoord_resource(
             const std::string _inst_name,
             const std::string& _context ) : 
-            eirods::resource( _inst_name, _context )
+            irods::resource( _inst_name, _context )
             {
                 // =-=-=-=-=-=-=-
                 // parse context string into property pairs assuming a ; as a separator
                 std::vector< std::string > props;
-                eirods::string_tokenize( _context, ";", props );
+                irods::string_tokenize( _context, ";", props );
                 
                 // =-=-=-=-=-=-=-
                 // parse key/property pairs using = as a separator and
@@ -1309,7 +1324,7 @@ extern "C" {
                     // =-=-=-=-=-=-=-
                     // break up key and value into two strings
                     std::vector< std::string > vals;
-                    eirods::string_tokenize( *itr, "=", vals );
+                    irods::string_tokenize( *itr, "=", vals );
                     
                     // =-=-=-=-=-=-=-
                     // break up key and value into two strings
@@ -1319,17 +1334,17 @@ extern "C" {
 
             } // ctor
 
-        eirods::error post_disconnect_maintenance_operation(
-            eirods::pdmo_type& _out_pdmo)
+        irods::error post_disconnect_maintenance_operation(
+            irods::pdmo_type& _out_pdmo)
             {
-                eirods::error result = SUCCESS();
+                irods::error result = SUCCESS();
                 return result;
             }
 
-        eirods::error need_post_disconnect_maintenance_operation(
+        irods::error need_post_disconnect_maintenance_operation(
             bool& _flag)
             {
-                eirods::error result = SUCCESS();
+                irods::error result = SUCCESS();
                 return result;
 
             }
@@ -1341,9 +1356,9 @@ extern "C" {
     //    instantiated object of the previously defined derived resource.  use
     //    the add_operation member to associate a 'call name' to the interfaces
     //    defined above.  for resource plugins these call names are standardized
-    //    as used by the eirods facing interface defined in
+    //    as used by the irods facing interface defined in
     //    server/drivers/src/fileDriver.c
-    eirods::resource* plugin_factory( const std::string& _inst_name, const std::string& _context  ) {
+    irods::resource* plugin_factory( const std::string& _inst_name, const std::string& _context  ) {
 
         // =-=-=-=-=-=-=-
         // 4a. create wosCoord_resource
@@ -1353,32 +1368,32 @@ extern "C" {
         // 4b. map function names to operations.  this map will be used to load
         //     the symbols from the shared object in the delay_load stage of
         //     plugin loading.
-        resc->add_operation( eirods::RESOURCE_OP_CREATE,            "wosCoordFileCreate" );
-        resc->add_operation( eirods::RESOURCE_OP_OPEN,              "wosCoordFileOpen" );
-        resc->add_operation( eirods::RESOURCE_OP_READ,              "wosCoordFileRead" );
-        resc->add_operation( eirods::RESOURCE_OP_WRITE,             "wosCoordFileWrite" );
-        resc->add_operation( eirods::RESOURCE_OP_CLOSE,             "wosCoordFileClose" );
-        resc->add_operation( eirods::RESOURCE_OP_UNLINK,            "wosCoordFileUnlink" );
-        resc->add_operation( eirods::RESOURCE_OP_STAT,              "wosCoordFileStat" );
-        resc->add_operation( eirods::RESOURCE_OP_FSTAT,             "wosCoordFileFstat" );
-        resc->add_operation( eirods::RESOURCE_OP_FSYNC,             "wosCoordFileFsync" );
-        resc->add_operation( eirods::RESOURCE_OP_MKDIR,             "wosCoordFileMkdir" );
-        resc->add_operation( eirods::RESOURCE_OP_CHMOD,             "wosCoordFileChmod" );
-        resc->add_operation( eirods::RESOURCE_OP_OPENDIR,           "wosCoordFileOpendir" );
-        resc->add_operation( eirods::RESOURCE_OP_READDIR,           "wosCoordFileReaddir" );
-        resc->add_operation( eirods::RESOURCE_OP_STAGE,             "wosCoordFileStage" );
-        resc->add_operation( eirods::RESOURCE_OP_RENAME,            "wosCoordFileRename" );
-        resc->add_operation( eirods::RESOURCE_OP_FREESPACE,         "wosCoordFileGetFsFreeSpace" );
-        resc->add_operation( eirods::RESOURCE_OP_LSEEK,             "wosCoordFileLseek" );
-        resc->add_operation( eirods::RESOURCE_OP_RMDIR,             "wosCoordFileRmdir" );
-        resc->add_operation( eirods::RESOURCE_OP_CLOSEDIR,          "wosCoordFileClosedir" );
-        resc->add_operation( eirods::RESOURCE_OP_TRUNCATE,          "wosCoordFileTruncate" );
-        resc->add_operation( eirods::RESOURCE_OP_STAGETOCACHE,      "wosCoordStageToCache" );
-        resc->add_operation( eirods::RESOURCE_OP_SYNCTOARCH,        "wosCoordSyncToArch" );
-        resc->add_operation( eirods::RESOURCE_OP_REGISTERED,        "wosCoordRegistered" );
-        resc->add_operation( eirods::RESOURCE_OP_UNREGISTERED,      "wosCoordUnregistered" );
-        resc->add_operation( eirods::RESOURCE_OP_MODIFIED,          "wosCoordModified" );
-        resc->add_operation( eirods::RESOURCE_OP_RESOLVE_RESC_HIER, "wosCoordRedirect" );
+        resc->add_operation( irods::RESOURCE_OP_CREATE,            "wosCoordFileCreate" );
+        resc->add_operation( irods::RESOURCE_OP_OPEN,              "wosCoordFileOpen" );
+        resc->add_operation( irods::RESOURCE_OP_READ,              "wosCoordFileRead" );
+        resc->add_operation( irods::RESOURCE_OP_WRITE,             "wosCoordFileWrite" );
+        resc->add_operation( irods::RESOURCE_OP_CLOSE,             "wosCoordFileClose" );
+        resc->add_operation( irods::RESOURCE_OP_UNLINK,            "wosCoordFileUnlink" );
+        resc->add_operation( irods::RESOURCE_OP_STAT,              "wosCoordFileStat" );
+        resc->add_operation( irods::RESOURCE_OP_FSTAT,             "wosCoordFileFstat" );
+        resc->add_operation( irods::RESOURCE_OP_FSYNC,             "wosCoordFileFsync" );
+        resc->add_operation( irods::RESOURCE_OP_MKDIR,             "wosCoordFileMkdir" );
+        resc->add_operation( irods::RESOURCE_OP_CHMOD,             "wosCoordFileChmod" );
+        resc->add_operation( irods::RESOURCE_OP_OPENDIR,           "wosCoordFileOpendir" );
+        resc->add_operation( irods::RESOURCE_OP_READDIR,           "wosCoordFileReaddir" );
+        resc->add_operation( irods::RESOURCE_OP_STAGE,             "wosCoordFileStage" );
+        resc->add_operation( irods::RESOURCE_OP_RENAME,            "wosCoordFileRename" );
+        resc->add_operation( irods::RESOURCE_OP_FREESPACE,         "wosCoordFileGetFsFreeSpace" );
+        resc->add_operation( irods::RESOURCE_OP_LSEEK,             "wosCoordFileLseek" );
+        resc->add_operation( irods::RESOURCE_OP_RMDIR,             "wosCoordFileRmdir" );
+        resc->add_operation( irods::RESOURCE_OP_CLOSEDIR,          "wosCoordFileClosedir" );
+        resc->add_operation( irods::RESOURCE_OP_TRUNCATE,          "wosCoordFileTruncate" );
+        resc->add_operation( irods::RESOURCE_OP_STAGETOCACHE,      "wosCoordStageToCache" );
+        resc->add_operation( irods::RESOURCE_OP_SYNCTOARCH,        "wosCoordSyncToArch" );
+        resc->add_operation( irods::RESOURCE_OP_REGISTERED,        "wosCoordRegistered" );
+        resc->add_operation( irods::RESOURCE_OP_UNREGISTERED,      "wosCoordUnregistered" );
+        resc->add_operation( irods::RESOURCE_OP_MODIFIED,          "wosCoordModified" );
+        resc->add_operation( irods::RESOURCE_OP_RESOLVE_RESC_HIER, "wosCoordRedirect" );
 
         // =-=-=-=-=-=-=-
         // set some properties necessary for backporting to iRODS legacy code
@@ -1388,8 +1403,8 @@ extern "C" {
 
         // =-=-=-=-=-=-=-
         // 4c. return the pointer through the generic interface of an
-        //     eirods::resource pointer
-        return dynamic_cast<eirods::resource*>( resc );
+        //     irods::resource pointer
+        return dynamic_cast<irods::resource*>( resc );
         
     } // plugin_factory
 
