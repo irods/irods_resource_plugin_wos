@@ -1174,6 +1174,9 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         std::string my_policy;
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
+        irods::stacktrace st;
+        st.trace();
+        st.dump();
 
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
@@ -1192,7 +1195,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
                  status = putTheFile(wos_host, wos_policy, (const char *)_cache_file_name, &theHeaders);
                  // returns non-zero on error.
                  if (!status) {
-                    if (!file_obj->physical_path().find(irods::EMPTY_RESC_PATH)) {
+                    if (std::string::npos == file_obj->physical_path().find(irods::EMPTY_RESC_PATH)) {
                         // delete the file corresponding to the existing OID
                         status = deleteTheFile(wos_host, file_obj->physical_path().c_str(), &deleteHeaders);
                     }

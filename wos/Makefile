@@ -1,10 +1,21 @@
+ifndef buildDir
+buildDir =  /home/howard/projects/e-irods/irods-github/iRODS
+endif
+
+include $(buildDir)/config/config.mk
+
+BOOST_LIBS = $(BOOST_DIR)/stage/lib/libboost_system.a \
+             $(BOOST_DIR)/stage/lib/libboost_filesystem.a \
+             $(BOOST_DIR)/stage/lib/libboost_regex.a \
+             $(BOOST_DIR)/stage/lib/libboost_thread.a
+
 TARGET = libwos.so
 
 SRCS = libwos.cpp
 
 HEADERS = curlWosFunctions.h
 
-EXTRALIBS = -L/usr/lib64 -lcurl
+EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/libirods.a
 
 EXTRAINCS = -I/usr/include/openssl
 
@@ -24,7 +35,7 @@ DEPS = $(patsubst %.cpp, ${DEPDIR}/%.d, ${SRCS})
 
 GCC = g++ -DRODS_SERVER -DZIP_EXEC_PATH=\"$(ZIP_EXEC_PATH)\" -DUNZIP_EXEC_PATH=\"$(UNZIP_EXEC_PATH)\"
 
-INC = -I/usr/include/irods ${EXTRAINCS}
+INC = -I/home/howard/projects/e-irods/irods-github/external/boost_1_55_0z -I/usr/include/irods ${EXTRAINCS}
 
 .PHONY: clean
 
@@ -52,7 +63,7 @@ ${DEPS}: ${SRCS} ${HEADERS}
 
 ${OBJDIR}/%.o: %.cpp
 	@-mkdir -p ${OBJDIR} > /dev/null 2>&1
-	${GCC} ${INC} -fPIC -c -g -o $@ $<
+	${GCC} ${INC} -fPIC -c -o $@ $<
 
 include ${DEPFILE}
 
