@@ -108,6 +108,8 @@ if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
         SUFFIX=centos6
     fi
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $epmosversion=true $LISTFILE
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.rpm build/irods-resource-plugin-${RESC_TYPE}-${SUFFIX}.rpm
+
 elif [ "$DETECTEDOS" == "SuSE" ] ; then # SuSE
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
     epmvar="SUSE"
