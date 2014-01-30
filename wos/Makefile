@@ -1,13 +1,10 @@
-ifndef buildDir
-buildDir =  /home/howard/projects/e-irods/irods-github/iRODS
-endif
 
 include $(buildDir)/config/config.mk
 
-BOOST_LIBS = $(BOOST_DIR)/stage/lib/libboost_system.a \
-             $(BOOST_DIR)/stage/lib/libboost_filesystem.a \
-             $(BOOST_DIR)/stage/lib/libboost_regex.a \
-             $(BOOST_DIR)/stage/lib/libboost_thread.a
+BOOST_LIBS = /usr/lib/irods/libboost_system.a \
+             /usr/lib/irods/libboost_filesystem.a \
+             /usr/lib/irods/libboost_regex.a \
+             /usr/lib/irods/libboost_thread.a
 
 TARGET = libwos.so
 
@@ -35,7 +32,7 @@ DEPS = $(patsubst %.cpp, ${DEPDIR}/%.d, ${SRCS})
 
 GCC = g++ -DRODS_SERVER -DZIP_EXEC_PATH=\"$(ZIP_EXEC_PATH)\" -DUNZIP_EXEC_PATH=\"$(UNZIP_EXEC_PATH)\"
 
-INC = -I/home/howard/projects/e-irods/irods-github/external/boost_1_55_0z -I/usr/include/irods ${EXTRAINCS}
+INC = -I/usr/include/irods ${EXTRAINCS}
 
 .PHONY: clean
 
