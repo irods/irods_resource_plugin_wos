@@ -12,15 +12,20 @@ cd $SCRIPTPATH
 # check input
 USAGE="
 Usage:
+  $SCRIPTNAME
   $SCRIPTNAME clean
-  $SCRIPTNAME postgres
-  $SCRIPTNAME mysql
-  $SCRIPTNAME oracle
 "
-#if [ $# -eq 0 -o $# -gt 1 -o "$1" == "-h" -o "$1" == "--help" -o "$1" == "help" ] ; then
-#    echo "$USAGE"
-#    exit 1
-#fi
+if [ $# -gt 1 -o "$1" == "-h" -o "$1" == "--help" -o "$1" == "help" ] ; then
+    echo "$USAGE"
+    exit 1
+fi
+
+# =-=-=-=-=-=-=-
+# require irods-dev package
+if [ ! -d /usr/include/irods ] ; then
+    echo "ERROR :: \"irods-dev\" package required to build this plugin" 1>&2
+    exit 1
+fi
 
 # =-=-=-=-=-=-=-
 # handle the case of build clean
@@ -61,9 +66,9 @@ DETECTEDOSVERSION=`$BUILDDIR/packaging/find_os_version.sh`
 echo "Detected OS Version [$DETECTEDOSVERSION]"
 
 # =-=-=-=-=-=-=-
-# build the particular flavor of DB plugin
+# build it
 cd $BUILDDIR
-echo "build  dir  [$BUILDDIR]"
+echo "build dir   [$BUILDDIR]"
 echo "script path [$SCRIPTPATH]"
 make 
 
@@ -91,7 +96,7 @@ cd $BUILDDIR
 EPMCMD="/usr/bin/epm"
 if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
-    epmvar="REDHATRPM$SERVER_TYPE"
+    epmvar="REDHAT"
     ostype=`awk '{print $1}' /etc/redhat-release`
     osversion=`awk '{print $3}' /etc/redhat-release`
     if [ "$ostype" == "CentOS" -a "$osversion" \> "6" ]; then
@@ -102,27 +107,27 @@ if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $epmosversion=true $LISTFILE
 elif [ "$DETECTEDOS" == "SuSE" ] ; then # SuSE
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
-    epmvar="SUSERPM$SERVER_TYPE"
+    epmvar="SUSE"
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 elif [ "$DETECTEDOS" == "Ubuntu" -o "$DETECTEDOS" == "Debian" ] ; then  # Ubuntu
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DEBs${text_reset}"
-    epmvar="DEB$SERVER_TYPE"
+    epmvar="DEB"
     $EPMCMD $EPMOPTS -a $arch -f deb irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 elif [ "$DETECTEDOS" == "Solaris" ] ; then  # Solaris
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS PKGs${text_reset}"
-    epmvar="PKG$SERVER_TYPE"
+    epmvar="PKG"
     $EPMCMD $EPMOPTS -f pkg irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 elif [ "$DETECTEDOS" == "MacOSX" ] ; then  # MacOSX
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DMGs${text_reset}"
-    epmvar="OSX$SERVER_TYPE"
+    epmvar="OSX"
     $EPMCMD $EPMOPTS -f osx irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 elif [ "$DETECTEDOS" == "ArchLinux" ] ; then  # ArchLinux
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS TGZs${text_reset}"
-    epmvar="ARCH$SERVER_TYPE"
+    epmvar="ARCH"
     $EPMCMD $EPMOPTS -f portable irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 elif [ "$DETECTEDOS" == "Portable" ] ; then  # Portable
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS TGZs${text_reset}"
-    epmvar="PORTABLE$SERVER_TYPE"
+    epmvar="PORTABLE"
     $EPMCMD $EPMOPTS -f portable irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
 else
     echo "${text_red}#######################################################" 1>&2
