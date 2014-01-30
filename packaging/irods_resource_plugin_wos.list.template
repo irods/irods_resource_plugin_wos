@@ -1,7 +1,7 @@
 # =-=-=-=-=-=-=-
 # EPM Variables
 # =-=-=-=-=-=-=-
-%product iRODS Postgres Database Plugin
+%product iRODS WOS Resource Plugin
 %copyright 2014, The University of North Carolina at Chapel Hill
 %vendor Renaissance Computing Institute <info@irods-consortium.org>
 %license LICENSE
@@ -9,99 +9,22 @@
 %description The integrated Rule-Oriented Data System
 %version TEMPLATE_PLUGINVERSION TEMPLATE_PLUGINVERSIONINT
 
-
-%requires irods-icat
-
-
-# =-=-=-=-=-=-=-
-# Required Packages for specific systems
-# and
-# Setting environment variables for EPM
-# =-=-=-=-=-=-=-
-
-%if DEBICAT
-$DEB=true
-$ICAT=true
-%requires unixodbc
-%requires odbc-postgresql
-%requires postgresql-client
-
-%elseif DEBRESOURCE
-$DEB=true
-$RESOURCE=true
-
-%elseif REDHATRPMICAT
-$REDHAT=true
-$RPM=true
-$ICAT=true
-%requires unixODBC
-
-%elseif SUSERPMICAT
-$SUSE=true
-$RPM=true
-$ICAT=true
-%requires psqlODBC
-%requires unixODBC
-
-%elseif ARCHICAT
-$ARCH=true
-$ICAT=true
-
-%endif
-
-
-%if CENTOS6
-%requires postgresql-odbc
-%endif
-
-
-
 %if DEB
 %requires libc6
-%requires libssl0.9.8
 %endif
-
-%if SUSE
-%requires libopenssl0_9_8
-%endif
-
-# =-=-=-=-=-=-=-
-# Required Packages for all systems
-# (have a common name across packaging universes)
-# =-=-=-=-=-=-=-
 
 %if ARCH
-
 %else
-
-%requires perl
 %requires python
-
 %endif
 
 %format all
 
 # =-=-=-=-=-=-=-
-# Configuration Variables
-# =-=-=-=-=-=-=-
-
-# =-=-=-=-=-=-=-
 # Install variables
 # =-=-=-=-=-=-=-
-$IRODS_PACKAGENAME=irods_database_plugin_postgres
 $IRODS_HOME_DIR=/var/lib/irods
 $OS_IRODS_ACCT=irods
-$IRODS_HOME=$IRODS_HOME_DIR/iRODS
-$DB_NAME=TEMPLATE_DB_NAME
-
-# =-=-=-=-=-=-=-
-# iRODS variables
-# =-=-=-=-=-=-=-
-$DB_ADMIN_ROLE=postgres
-$DB_TYPE=TEMPLATE_DB_TYPE
-$DB_HOST=TEMPLATE_DB_HOST
-$DB_PORT=TEMPLATE_DB_PORT
-$DB_USER=$OS_IRODS_ACCT
 
 # =-=-=-=-=-=-=-
 # preinstall
