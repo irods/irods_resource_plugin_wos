@@ -93,6 +93,7 @@ else
 fi
 
 cd $BUILDDIR
+mkdir -p build
 EPMCMD="/usr/bin/epm"
 if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
@@ -101,18 +102,22 @@ if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
     osversion=`awk '{print $3}' /etc/redhat-release`
     if [ "$ostype" == "CentOS" -a "$osversion" \> "6" ]; then
         epmosversion="CENTOS6"
+        SUFFIX=redhat
     else
         epmosversion="NOTCENTOS6"
+        SUFFIX=centos6
     fi
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $epmosversion=true $LISTFILE
 elif [ "$DETECTEDOS" == "SuSE" ] ; then # SuSE
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
     epmvar="SUSE"
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.rpm build/irods-resource-plugin-${RESC_TYPE}-suse.rpm
 elif [ "$DETECTEDOS" == "Ubuntu" -o "$DETECTEDOS" == "Debian" ] ; then  # Ubuntu
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DEBs${text_reset}"
     epmvar="DEB"
     $EPMCMD $EPMOPTS -a $arch -f deb irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.deb build/irods-resource-plugin-${RESC_TYPE}.deb
 elif [ "$DETECTEDOS" == "Solaris" ] ; then  # Solaris
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS PKGs${text_reset}"
     epmvar="PKG"
