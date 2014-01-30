@@ -1,5 +1,4 @@
 
-include $(buildDir)/config/config.mk
 
 BOOST_LIBS = /usr/lib/irods/libboost_system.a \
              /usr/lib/irods/libboost_filesystem.a \
