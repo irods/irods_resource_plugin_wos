@@ -98,8 +98,8 @@ EPMCMD="/usr/bin/epm"
 if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
     epmvar="REDHAT"
-    ostype=`awk '{print $1}' /etc/redhat-release`
-    osversion=`awk '{print $3}' /etc/redhat-release`
+    ostype=`awk '{print $1}' /etc/issue`
+    osversion=`awk '{print $3}' /etc/issue`
     if [ "$ostype" == "CentOS" -a "$osversion" \> "6" ]; then
         epmosversion="CENTOS6"
         SUFFIX=redhat
