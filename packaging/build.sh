@@ -46,7 +46,7 @@ source $SCRIPTPATH/VERSION
 echo "Detected Plugin Version to Build [$PLUGINVERSION]"
 echo "Detected Plugin Version Integer  [$PLUGINVERSIONINT]"
 LISTFILE="$SCRIPTPATH/irods_resource_plugin_${RESC_TYPE}.list"
-TMPFILE="/tmp/irods_db_plugin.list"
+TMPFILE="/tmp/irods_resource_plugin_${RESC_TYPE}.list"
 sed -e "s,TEMPLATE_PLUGINVERSIONINT,$PLUGINVERSIONINT," $LISTFILE.template > $TMPFILE
 mv $TMPFILE $LISTFILE
 sed -e "s,TEMPLATE_PLUGINVERSION,$PLUGINVERSION," $LISTFILE > $TMPFILE
@@ -108,34 +108,43 @@ if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
         SUFFIX=redhat
     fi
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $epmosversion=true $LISTFILE
-    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.rpm build/irods-resource-plugin-${RESC_TYPE}-${SUFFIX}.rpm
+    STARTFILE=irods-resource-plugin-${RESC_TYPE}*.rpm 
+    echo "startfile [$STARTFILE]"
+    NEWFILE=${STARTFILE/.rpm/-${SUFFIX}.rpm}
+    cp linux-*/./build/irods-resource-plugin-${RESC_TYPE}-${SUFFIX}.rpm ${NEWFILE}
 
 elif [ "$DETECTEDOS" == "SuSE" ] ; then # SuSE
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
     epmvar="SUSE"
     $EPMCMD $EPMOPTS -f rpm irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
-    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.rpm build/irods-resource-plugin-${RESC_TYPE}-suse.rpm
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.rpm ./build/
+
 elif [ "$DETECTEDOS" == "Ubuntu" -o "$DETECTEDOS" == "Debian" ] ; then  # Ubuntu
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DEBs${text_reset}"
     epmvar="DEB"
     $EPMCMD $EPMOPTS -a $arch -f deb irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
-    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.deb build/irods-resource-plugin-${RESC_TYPE}.deb
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.deb ./build/
+
 elif [ "$DETECTEDOS" == "Solaris" ] ; then  # Solaris
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS PKGs${text_reset}"
     epmvar="PKG"
     $EPMCMD $EPMOPTS -f pkg irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+
 elif [ "$DETECTEDOS" == "MacOSX" ] ; then  # MacOSX
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DMGs${text_reset}"
     epmvar="OSX"
     $EPMCMD $EPMOPTS -f osx irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+
 elif [ "$DETECTEDOS" == "ArchLinux" ] ; then  # ArchLinux
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS TGZs${text_reset}"
     epmvar="ARCH"
     $EPMCMD $EPMOPTS -f portable irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+
 elif [ "$DETECTEDOS" == "Portable" ] ; then  # Portable
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS TGZs${text_reset}"
     epmvar="PORTABLE"
     $EPMCMD $EPMOPTS -f portable irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
+
 else
     echo "${text_red}#######################################################" 1>&2
     echo "ERROR :: Unknown OS, cannot generate packages with EPM" 1>&2
