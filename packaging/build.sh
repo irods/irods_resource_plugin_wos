@@ -21,13 +21,6 @@ if [ $# -gt 1 -o "$1" == "-h" -o "$1" == "--help" -o "$1" == "help" ] ; then
 fi
 
 # =-=-=-=-=-=-=-
-# require irods-dev package
-if [ ! -d /usr/include/irods ] ; then
-    echo "ERROR :: \"irods-dev\" package required to build this plugin" 1>&2
-    exit 1
-fi
-
-# =-=-=-=-=-=-=-
 # handle the case of build clean
 if [ "$1" == "clean" ] ; then
     rm -f $SCRIPTPATH/irods_resource_plugin_*.list
@@ -35,6 +28,13 @@ if [ "$1" == "clean" ] ; then
     rm -rf linux-*
     make clean
     exit 0
+fi
+
+# =-=-=-=-=-=-=-
+# require irods-dev package
+if [ ! -d /usr/include/irods ] ; then
+    echo "ERROR :: \"irods-dev\" package required to build this plugin" 1>&2
+    exit 1
 fi
 
 # =-=-=-=-=-=-=-
