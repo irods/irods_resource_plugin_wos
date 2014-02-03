@@ -26,6 +26,7 @@ if [ "$1" == "clean" ] ; then
     rm -f $SCRIPTPATH/irods_resource_plugin_*.list
     cd $BUILDDIR
     rm -rf linux-*
+    rm -rf build/*
     make clean
     exit 0
 fi
