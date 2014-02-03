@@ -124,7 +124,8 @@ elif [ "$DETECTEDOS" == "Ubuntu" -o "$DETECTEDOS" == "Debian" ] ; then  # Ubuntu
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DEBs${text_reset}"
     epmvar="DEB"
     $EPMCMD $EPMOPTS -a $arch -f deb irods-resource-plugin-${RESC_TYPE} $epmvar=true $LISTFILE
-    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.deb ./build/
+    NEWFILE=irods-resource-plugin-${RESC_TYPE}.deb
+    cp linux-*/irods-resource-plugin-${RESC_TYPE}*.deb ./build/${NEWFILE}
 
 elif [ "$DETECTEDOS" == "Solaris" ] ; then  # Solaris
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS PKGs${text_reset}"
