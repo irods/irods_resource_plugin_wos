@@ -95,6 +95,9 @@ if [ "$1" = "-h" -o "$1" = "--help" -o "$1" = "help" ] ; then
 fi
 
 # =-=-=-=-=-=-=-
+# detecting build environment
+echo "${text_green}${text_bold}Build Environment...${text_reset}"
+# =-=-=-=-=-=-=-
 # determine the OS Flavor
 DETECTEDOS=`$TOPLEVEL/packaging/find_os.sh`
 echo "Detected OS                         [$DETECTEDOS]"
@@ -104,10 +107,14 @@ DETECTEDOSVERSION=`$TOPLEVEL/packaging/find_os_version.sh`
 echo "Detected OS Version                 [$DETECTEDOSVERSION]"
 # =-=-=-=-=-=-=-
 # detect the project name
-PROJECTNAME=`basename $TOPLEVEL`
-echo "Detected Project Name               [$PROJECTNAME]"
-EPM_PROJECTNAME=${PROJECTNAME//_/-}
-echo "Detected EPM Project Name           [$EPM_PROJECTNAME]"
+source $TOPLEVEL/VERSION
+echo "Detected Plugin Name                [$PLUGINNAME]"
+EPM_PACKAGENAME=${PLUGINNAME//_/-}
+echo "Detected EPM Package Name           [$EPM_PACKAGENAME]"
+# =-=-=-=-=-=-=-
+# detect plugin version
+echo "Detected Plugin Version to Build    [$PLUGINVERSION]"
+echo "Detected Plugin Version Integer     [$PLUGINVERSIONINT]"
 # =-=-=-=-=-=-=-
 # get into the top level directory
 cd $TOPLEVEL
@@ -121,13 +128,8 @@ echo "Detected Packaging Directory        [$PACKAGEDIR]"
 BUILDDIR="$TOPLEVEL/build"
 echo "Detected Target Build Directory     [$BUILDDIR]"
 # =-=-=-=-=-=-=-
-# detect plugin version
-source $TOPLEVEL/VERSION
-echo "Detected Plugin Version to Build    [$PLUGINVERSION]"
-echo "Detected Plugin Version Integer     [$PLUGINVERSIONINT]"
-# =-=-=-=-=-=-=-
 # define list file
-LISTFILE=$PACKAGEDIR/$PROJECTNAME.list
+LISTFILE=$PACKAGEDIR/$PLUGINNAME.list
 echo "Detected EPM List File              [$LISTFILE]"
 
 # =-=-=-=-=-=-=-
@@ -175,6 +177,7 @@ echo ""
 
 # =-=-=-=-=-=-=-
 # build the plugin itself
+echo "${text_green}${text_bold}Building...${text_reset}"
 $MAKEJCMD
 
 # =-=-=-=-=-=-=-
@@ -224,37 +227,37 @@ if [ "$DETECTEDOS" == "RedHatCompatible" ] ; then # CentOS and RHEL and Fedora
         epmosversion="NOTCENTOS6"
         SUFFIX=redhat
     fi
-    $EPMCMD $EPMOPTS -f rpm $EPM_PROJECTNAME RPM=true $epmosversion=true $LISTFILE
+    $EPMCMD $EPMOPTS -f rpm $EPM_PACKAGENAME RPM=true $epmosversion=true $LISTFILE
 
 elif [ "$DETECTEDOS" == "SuSE" ] ; then # SuSE
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS RPMs${text_reset}"
     EXTENSION="rpm"
     epmvar="SUSE"
-    $EPMCMD $EPMOPTS -f rpm $EPM_PROJECTNAME $epmvar=true $LISTFILE
+    $EPMCMD $EPMOPTS -f rpm $EPM_PACKAGENAME $epmvar=true $LISTFILE
 
 elif [ "$DETECTEDOS" == "Ubuntu" -o "$DETECTEDOS" == "Debian" ] ; then  # Ubuntu
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DEBs${text_reset}"
     EXTENSION="deb"
     epmvar="DEB"
-    $EPMCMD $EPMOPTS -a $arch -f deb $EPM_PROJECTNAME $epmvar=true $LISTFILE
+    $EPMCMD $EPMOPTS -a $arch -f deb $EPM_PACKAGENAME $epmvar=true $LISTFILE
 
 elif [ "$DETECTEDOS" == "Solaris" ] ; then  # Solaris
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS PKGs${text_reset}"
     EXTENSION="pkg"
     epmvar="PKG"
-    $EPMCMD $EPMOPTS -f pkg $EPM_PROJECTNAME $epmvar=true $LISTFILE
+    $EPMCMD $EPMOPTS -f pkg $EPM_PACKAGENAME $epmvar=true $LISTFILE
 
 elif [ "$DETECTEDOS" == "MacOSX" ] ; then  # MacOSX
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS DMGs${text_reset}"
     EXTENSION="dmg"
     epmvar="OSX"
-    $EPMCMD $EPMOPTS -f osx $EPM_PROJECTNAME $epmvar=true $LISTFILE
+    $EPMCMD $EPMOPTS -f osx $EPM_PACKAGENAME $epmvar=true $LISTFILE
 
 elif [ "$DETECTEDOS" == "ArchLinux" ] ; then  # ArchLinux
     echo "${text_green}${text_bold}Running EPM :: Generating $DETECTEDOS TGZs${text_reset}"
     EXTENSION="tar.gz"
     epmvar="ARCH"
-    $EPMCMD $EPMOPTS -f portable $EPM_PROJECTNAME $epmvar=true $LISTFILE
+    $EPMCMD $EPMOPTS -f portable $EPM_PACKAGENAME $epmvar=true $LISTFILE
 
 else
     echo "${text_red}#######################################################" 1>&2
@@ -267,7 +270,7 @@ fi
 # move package to build directory
 cd $TOPLEVEL
 mkdir -p $BUILDDIR
-mv linux*/$EPM_PROJECTNAME*.$EXTENSION $BUILDDIR/$EPM_PROJECTNAME-$PLUGINVERSION.$EXTENSION
+mv linux*/$EPM_PACKAGENAME*.$EXTENSION $BUILDDIR/$EPM_PACKAGENAME-$PLUGINVERSION.$EXTENSION
 echo ""
 echo "$BUILDDIR:"
 ls -l $BUILDDIR
