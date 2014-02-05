@@ -11,11 +11,15 @@
 
 %if DEB
 %requires libc6
+%requires libcurl3
+%endif
+
+%if RPM
+%requires curl-devel
 %endif
 
 %if ARCH
 %else
-%requires python
 %endif
 
 %format all

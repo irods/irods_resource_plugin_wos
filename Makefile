@@ -1,5 +1,4 @@
-SUBS = 	wos \
-	woscoordinator
+SUBS = 	wos 
 
 ######################################################################
 # Configuration should occur above this line

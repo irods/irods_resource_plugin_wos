@@ -9,6 +9,8 @@
 #include "rodsLog.hpp"
 #include "rodsErrorTable.hpp"
 #include "objInfo.hpp"
+#include "getHierarchyForResc.hpp"
+#include "regReplica.hpp"
 
 #ifdef USING_JSON
 #include <json/json.h>
@@ -35,6 +37,7 @@
 // =-=-=-=-=-=-=-
 // irods includes
 #include "irods_resource_plugin.hpp"
+#include "irods_resource_backport.hpp"
 #include "irods_file_object.hpp"
 #include "irods_physical_object.hpp"
 #include "irods_collection_object.hpp"
@@ -42,6 +45,8 @@
 #include "irods_hierarchy_parser.hpp"
 #include "irods_resource_redirect.hpp"
 #include "irods_stacktrace.hpp"
+#include "irods_virtual_path.hpp"
+#include "irods_kvp_string_parser.hpp"
 
 // =-=-=-=-=-=-=-
 // stl includes
@@ -86,6 +91,11 @@
 #include <string.h>
 
 extern "C" {
+
+static const std::string WOS_HOST_KEY( "wos_host" );
+static const std::string WOS_POLICY_KEY( "wos_policy" );
+static const std::string REPL_POLICY_KEY( "repl_policy" );
+static const std::string REPL_POLICY_REG( "consider_wos_repl" );
 
 
 /** 
@@ -885,7 +895,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         
            irods::plugin_property_map& prop_map = _ctx.prop_map();
    
-           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
               wos_host = my_host.c_str();
       
@@ -925,7 +935,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
 
            irods::plugin_property_map& prop_map = _ctx.prop_map();
-           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
            if((result = ASSERT_PASS(prop_ret, " - prop_map has no wos_host")).ok()) {
               wos_host = my_host.c_str();
       
@@ -1101,7 +1111,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // is not used.
     irods::error wosStageToCachePlugin(
         irods::resource_plugin_context& _ctx,
-        char*                            _cache_file_name ) {
+        char*                           _cache_file_name ) {
 
         int status;
         struct stat fileStatus;
@@ -1118,12 +1128,12 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
            irods::plugin_property_map&  prop_map = _ctx.prop_map();
 
-           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) { 
               wos_host = my_host.c_str();
       
               irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
-      
+              
               // The old code allows user to set a mode.  We should now be doing this.
               status = getTheFile(wos_host, 
                                   file_obj->physical_path().c_str(), 
@@ -1144,7 +1154,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
                     }
                  } else {
                      // stat of file failed
-                     result = ERROR( UNIX_FILE_STAT_ERR - errno, "stat of source file failed");
+                     result = ERROR( UNIX_FILE_STAT_ERR - errno, "stat of the cache file failed");
                  }
               } else {
                  // get the file failed
@@ -1182,11 +1192,11 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         irods::error ret = wosCheckParams( _ctx );
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
            irods::plugin_property_map& prop_map = _ctx.prop_map();
-           prop_ret = prop_map.get< std::string >( "wos_host", my_host );
+           prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
 
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
               wos_host = my_host.c_str();
-              prop_ret = prop_map.get< std::string >( "wos_policy", my_policy );
+              prop_ret = prop_map.get< std::string >( WOS_POLICY_KEY, my_policy );
       
               if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
                  wos_policy = my_policy.c_str();
@@ -1256,14 +1266,195 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     } // wosRedirectCreate
 
+    /// =-=-=-=-=-=-=-
+    /// @brief given a property map and file object, attempt to fetch it from 
+    ///        the WOS system as it may be replicated under the covers.  we then
+    ///        regsiter the archive version as a proper replica
+    irods::error register_archive_object(
+        irods::resource_plugin_context&  _ctx,
+        irods::file_object_ptr           _file_obj ) {
+        // =-=-=-=-=-=-=-
+        // get the name of this resource
+        std::string resc_name;
+        irods::error ret = _ctx.prop_map().get< std::string >( irods::RESOURCE_NAME, resc_name );
+        if( !ret.ok() ) {
+            return PASS( ret );
+        }
+
+        // =-=-=-=-=-=-=-
+        // first scan for a repl with this resource in the
+        // hierarchy, if there is one then no need to continue
+        std::vector< irods::physical_object > objs = _file_obj->replicas();
+        std::vector< irods::physical_object >::iterator itr = objs.begin();
+        for ( ; itr != objs.end(); ++itr ) {
+            if( std::string::npos != itr->resc_hier().find( resc_name ) ) {
+                return SUCCESS();
+            }
+
+        } // for itr
+
+        // =-=-=-=-=-=-=-
+        // get the repl policy to determine if we need to check for an archived
+        // replica and if so register it
+        std::string repl_policy;
+        ret = _ctx.prop_map().get< std::string >( REPL_POLICY_KEY, repl_policy );
+        if( !ret.ok() ) {
+            return ERROR( INVALID_OBJECT_NAME, "object not found on the archive" );
+        }
+
+        // =-=-=-=-=-=-=-
+        // search for a phypath with NO separator, this should be the object id
+        std::string obj_id;
+        std::string virt_sep = irods::get_virtual_path_separator();
+        for ( itr  = objs.begin();
+              itr != objs.end(); 
+              ++itr ) {
+
+            size_t pos = itr->path().find( virt_sep );
+            if( std::string::npos == pos ) {
+                obj_id = itr->path();
+                break;
+            }
+        }
+
+        // =-=-=-=-=-=-=-
+        // get the wos host property
+        std::string wos_host;
+        ret = _ctx.prop_map().get< std::string >( WOS_HOST_KEY, wos_host );
+        if( !ret.ok() ) {
+            return PASS( ret );
+        }
+
+        // =-=-=-=-=-=-=-
+        // perform a stat on the obj id to see if it is there
+        WOS_HEADERS wos_headers;
+        int status = getTheFileStatus( wos_host.c_str(), obj_id.c_str(), &wos_headers );
+        if ( status ) {
+            return ERROR( status, "error in getTheFileStatus");
+
+        } 
+        
+        // =-=-=-=-=-=-=-
+        // get our parent resource
+        getHierarchyForRescOut_t* get_hier_out = 0;
+        getHierarchyForRescInp_t  get_hier_inp;
+        strncpy( 
+            get_hier_inp.resc_name_, 
+            resc_name.c_str(),
+            MAX_NAME_LEN );
+        status = rsGetHierarchyForResc(
+                     _ctx.comm(),
+                     &get_hier_inp,
+                     &get_hier_out ); 
+        if( status < 0 ) {
+            return ERROR( status, "failed to get resc hier" );
+        }
+
+        // =-=-=-=-=-=-=-
+        // get the root resc of the hier
+        std::string root_resc;
+        irods::hierarchy_parser parser;
+        parser.set_string( get_hier_out->resc_hier_ );
+        parser.first_resc( root_resc );
+        
+        // =-=-=-=-=-=-=-
+        // find the highest repl number for this data object
+        int max_repl_num = 0;
+        for ( itr  = objs.begin();
+              itr != objs.end(); 
+              ++itr ) {
+            if( itr->repl_num() > max_repl_num ) {
+                max_repl_num = itr->repl_num();
+            
+            }
+
+        } // for itr
+
+        // =-=-=-=-=-=-=-
+        // grab the first physical object to reference
+        // for the various properties in the obj info
+        // physical object to mine for various properties
+        itr = objs.begin();
+
+        // =-=-=-=-=-=-=-
+        // build out a dataObjInfo_t struct for use in the call
+        // to rsRegDataObj
+        dataObjInfo_t dst_data_obj;
+        bzero( &dst_data_obj, sizeof( dst_data_obj ) );
+        
+        strncpy( dst_data_obj.objPath,       itr->name().c_str(),             MAX_NAME_LEN );
+        strncpy( dst_data_obj.rescName,      root_resc.c_str(),               NAME_LEN );
+        strncpy( dst_data_obj.rescHier,      get_hier_out->resc_hier_,        MAX_NAME_LEN );
+        strncpy( dst_data_obj.rescGroupName, root_resc.c_str(),               NAME_LEN );
+        strncpy( dst_data_obj.dataType,      itr->type_name( ).c_str(),       NAME_LEN );
+        dst_data_obj.dataSize = itr->size( );
+        strncpy( dst_data_obj.chksum,        itr->checksum( ).c_str(),        NAME_LEN );
+        strncpy( dst_data_obj.version,       itr->version( ).c_str(),         NAME_LEN );
+        strncpy( dst_data_obj.filePath,      obj_id.c_str(),                  MAX_NAME_LEN );
+        dst_data_obj.rescInfo    = 0; // JMC - possible issue
+        strncpy( dst_data_obj.dataOwnerName, itr->owner_name( ).c_str(),      NAME_LEN );
+        strncpy( dst_data_obj.dataOwnerZone, itr->owner_zone( ).c_str(),      NAME_LEN );
+        dst_data_obj.replNum    = max_repl_num+1;
+        dst_data_obj.replStatus = itr->is_dirty( );
+        strncpy( dst_data_obj.statusString,  itr->status( ).c_str(),          NAME_LEN );
+        dst_data_obj.dataId = itr->id(); 
+        dst_data_obj.collId = itr->coll_id(); 
+        dst_data_obj.dataMapId = 0; 
+        dst_data_obj.flags     = 0; 
+        strncpy( dst_data_obj.dataComments,  itr->r_comment( ).c_str(),       MAX_NAME_LEN );
+        strncpy( dst_data_obj.dataMode,      itr->mode( ).c_str(),            SHORT_STR_LEN );
+        strncpy( dst_data_obj.dataExpiry,    itr->expiry_ts( ).c_str(),       TIME_LEN );
+        strncpy( dst_data_obj.dataCreate,    itr->create_ts( ).c_str(),       TIME_LEN );
+        strncpy( dst_data_obj.dataModify,    itr->modify_ts( ).c_str(),       TIME_LEN );
+
+        // =-=-=-=-=-=-=-
+        // manufacture a src data obj
+        dataObjInfo_t src_data_obj;
+        memcpy( &src_data_obj, &dst_data_obj, sizeof( dst_data_obj ) );
+        src_data_obj.replNum = itr->repl_num();
+        strncpy( src_data_obj.filePath, itr->path().c_str(),       MAX_NAME_LEN );
+        strncpy( src_data_obj.rescHier, itr->resc_hier().c_str(),  MAX_NAME_LEN );
+
+        // =-=-=-=-=-=-=-
+        // repl to an existing copy
+        regReplica_t reg_inp;
+        bzero( &reg_inp, sizeof( reg_inp ) );
+        reg_inp.srcDataObjInfo  = &src_data_obj;
+        reg_inp.destDataObjInfo = &dst_data_obj;
+        status = rsRegReplica( _ctx.comm(), &reg_inp );
+        if( status < 0 ) {
+            return ERROR( status, "failed to register data object" );
+        }
+        
+        // =-=-=-=-=-=-=-
+        // we need to make a physical object and add it to the file_object
+        // so it can get picked up for the repl operation
+        irods::physical_object phy_obj = (*itr);
+        phy_obj.resc_hier( dst_data_obj.rescHier );
+        phy_obj.repl_num( dst_data_obj.replNum );
+        objs.push_back( phy_obj );
+        _file_obj->replicas( objs );
+
+        // =-=-=-=-=-=-=-
+        // repave resc hier in file object as it is
+        // what is used to determine hierarchy in
+        // the compound resource
+        _file_obj->resc_hier( dst_data_obj.rescHier );
+        _file_obj->physical_path( dst_data_obj.filePath );
+
+        return SUCCESS();
+
+    } // register_archive_object
+    
     // =-=-=-=-=-=-=-
     // redirect_get - code to determine redirection for get operation
     irods::error wosRedirectOpen( 
-                      irods::plugin_property_map& _prop_map,
-                      irods::file_object_ptr        _file_obj,
-                      const std::string&             _resc_name, 
-                      const std::string&             _curr_host, 
-                      float&                         _out_vote ) {
+        irods::resource_plugin_context&  _ctx,
+        irods::plugin_property_map& _prop_map,
+        irods::file_object_ptr      _file_obj,
+        const std::string&          _resc_name, 
+        const std::string&          _curr_host, 
+        float&                      _out_vote ) {
 
         irods::error result = SUCCESS();
 
@@ -1284,13 +1475,19 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
               std::string host_name;
               get_ret = _prop_map.get< std::string >( irods::RESOURCE_LOCATION, host_name );
               if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - failed to get 'location' prop")).ok()) {
-              
                  // =-=-=-=-=-=-=-
-                 // vote higher if we are on the same host
-                 if( _curr_host == host_name ) {
-                     _out_vote = 1.0;
-                 } else {
-                     _out_vote = 0.5;
+                 // consider registration of object on WOS if it is not already
+                 get_ret = register_archive_object( 
+                               _ctx,
+                               _file_obj );
+                 if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - register_archive_object failed")).ok()) {
+                     // =-=-=-=-=-=-=-
+                     // vote higher if we are on the same host
+                     if( _curr_host == host_name ) {
+                         _out_vote = 1.0;
+                     } else {
+                         _out_vote = 0.5;
+                     }
                  }
               }
            }
@@ -1347,7 +1544,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
                      // =-=-=-=-=-=-=-
                      // call redirect determination for 'get' operation
                      result =  
-                        wosRedirectOpen( _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote));
+                        wosRedirectOpen( _ctx, _ctx.prop_map(), file_obj, resc_name, (*_curr_host), (*_out_vote));
                  } else if( irods::CREATE_OPERATION == (*_opr) ) {
                      // =-=-=-=-=-=-=-
                      // call redirect determination for 'create' operation
@@ -1371,33 +1568,31 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             // =-=-=-=-=-=-=-
             // parse context string into property pairs assuming a ; as a separator
             std::vector< std::string > props;
-            rodsLog( LOG_NOTICE, "context: %s", _context.c_str());
-            irods::string_tokenize( _context, ";", props );
+            rodsLog( LOG_DEBUG, "context: %s", _context.c_str());
+
+            irods::kvp_map_t kvp;
+            irods::parse_kvp_string(
+                _context,
+                kvp );
 
             // =-=-=-=-=-=-=-
-            // parse key/property pairs using = as a separator and
-            // add them to the property list
-            std::vector< std::string >::iterator itr = props.begin();
-            for( ; itr != props.end(); ++itr ) {
-                // =-=-=-=-=-=-=-
-                // break up key and value into two strings
-                std::vector< std::string > vals;
-                irods::string_tokenize( *itr, "=", vals );
+            // copy the properties from the context to the prop map
+            irods::kvp_map_t::iterator itr = kvp.begin();
+            for( ; itr != kvp.end(); ++itr ) {
+                properties_.set< std::string >( 
+                    itr->first,
+                    itr->second );
+                    
+            } // for itr
 
-                // =-=-=-=-=-=-=-
-                // break up key and value into two strings
-
-                rodsLog( LOG_NOTICE, "vals: %s %s", vals[0].c_str(), vals[1].c_str());
-                properties_[ vals[0] ] = vals[1];
-
-                std::string my_host;
-                irods::error prop_ret = properties_.get< std::string >( "wos_host", my_host );
-                if (!prop_ret.ok()) {
-                    std::stringstream msg;
-                    rodsLog( LOG_NOTICE, "prop_map has no wos_host " );
-                }
-
-            } // for itr 
+            // =-=-=-=-=-=-=-
+            // check for certain properties
+            std::string my_host;
+            irods::error prop_ret = properties_.get< std::string >( WOS_HOST_KEY, my_host );
+            if (!prop_ret.ok()) {
+                std::stringstream msg;
+                rodsLog( LOG_NOTICE, "prop_map has no wos_host " );
+            }
 
         } // ctor
 

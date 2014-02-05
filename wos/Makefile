@@ -13,7 +13,7 @@ HEADERS = curlWosFunctions.h
 
 EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/libirods.a
 
-EXTRAINCS = -I/usr/include/openssl
+EXTRAINCS = 
 
 ######################################################################
 # General settings below. These should not need to be changed in most
@@ -29,7 +29,7 @@ DEPFILE = .depends
 OBJS = $(patsubst %.cpp, ${OBJDIR}/%.o, ${SRCS})
 DEPS = $(patsubst %.cpp, ${DEPDIR}/%.d, ${SRCS})
 
-GCC = g++ -DRODS_SERVER -DZIP_EXEC_PATH=\"$(ZIP_EXEC_PATH)\" -DUNZIP_EXEC_PATH=\"$(UNZIP_EXEC_PATH)\"
+GCC = g++ -DRODS_SERVER
 
 INC = -I/usr/include/irods ${EXTRAINCS}
 
