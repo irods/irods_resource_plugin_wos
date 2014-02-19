@@ -23,7 +23,7 @@ class Test_Compound_with_WOS_Resource(unittest.TestCase, ResourceSuite, ChunkyDe
             "iadmin modresc demoResc name origResc",
             "iadmin mkresc demoResc compound",
             "iadmin mkresc cacheResc 'unix file system' "+hostname+":/var/lib/irods/cacheRescVault",
-            "iadmin mkresc archiveResc wos "+hostname+":/fakePath wos_host=http://wos.edc.renci.org;wos_policy=Howard",
+            "iadmin mkresc archiveResc wos "+hostname+" wos_host=http://wos.edc.renci.org;wos_policy=Howard",
             "iadmin addchildtoresc demoResc cacheResc cache",
             "iadmin addchildtoresc demoResc archiveResc archive",
         ],
