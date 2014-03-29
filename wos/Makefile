@@ -11,7 +11,7 @@ SRCS = libwos.cpp
 
 HEADERS = curlWosFunctions.h
 
-EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/libirods.a
+EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/irods/libirods_client.a
 
 EXTRAINCS = 
 
