@@ -1184,9 +1184,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         std::string my_policy;
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
-        irods::stacktrace st;
-        st.trace();
-        st.dump();
 
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
