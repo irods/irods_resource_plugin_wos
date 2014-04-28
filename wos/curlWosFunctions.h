@@ -128,18 +128,18 @@ typedef struct WOS_STATISTICS_TYPE {
 
 extern "C" {
 
-int 
+static int 
 putTheFile (const char *resource, const char *policy, const char *file, WOS_HEADERS_P headerP);
-int 
+static int 
 getTheFile (const char *resource, const char *file, const char *destination, int mode,
             WOS_HEADERS_P headerP);
-int 
+static int 
 getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP);
-int 
+static int 
 deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP);
-int
-getTheManagementData(const char *resource, const char *user, const char *password, 
-                     WOS_STATISTICS_P statsP);
+
+static int getTheManagementData(const char *resource, const char *user, const char *password, WOS_STATISTICS_P statsP);
+                     
 
 }; // extern "C" 
 #endif

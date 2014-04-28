@@ -91,7 +91,6 @@
 #include <string.h>
 
 extern "C" {
-
 static const std::string WOS_HOST_KEY( "wos_host" );
 static const std::string WOS_POLICY_KEY( "wos_policy" );
 static const std::string REPL_POLICY_KEY( "repl_policy" );
@@ -297,9 +296,8 @@ static size_t readTheData(void *ptr, size_t size, size_t nmemb, void *stream)
  * @param headerP A pointer to WOS_HEADERS structure that will be filled in.
  * @return res.  The return code from curl_easy_perform.
  */
-int 
+static int 
 putTheFile (const char *resource, const char *policy, const char *file, WOS_HEADERS_P headerP) {
-   rodsLog(LOG_NOTICE,"getting ready to put the file\n");
    CURLcode res;
    CURL *theCurl;
    time_t now;
@@ -313,7 +311,7 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
  
    // The headers
    struct curl_slist *headers = NULL;
-
+   
    // Initialize lib curl
    theCurl = curl_easy_init();
 
@@ -345,6 +343,7 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
    if (stat(file, &sourceFileInfo)){
       rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
              file, errno);
+      curl_easy_cleanup(theCurl);
       return(RE_FILE_STAT_ERROR - errno);
    }
 
@@ -374,19 +373,38 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
    // read function
    sourceFile = fopen(file, "rb");
    if (!sourceFile) {
+      curl_easy_cleanup(theCurl);
+      fclose( sourceFile );
+      std::string msg( "failed to open file [" );
+      msg += file;
+      msg += "]";
+      irods::log( ERROR( UNIX_FILE_OPEN_ERR, msg ) );
       return(UNIX_FILE_OPEN_ERR - errno);
    } else {
       curl_easy_setopt(theCurl, CURLOPT_READDATA, sourceFile);
       res = curl_easy_perform(theCurl);
       if (res) {
          // An error in libcurl
+         curl_easy_cleanup(theCurl);
+
+         std::stringstream msg;
+         msg << "failed to call curl_easy_perform - ";
+         msg << res; 
+         irods::log( ERROR( 
+                         UNIX_FILE_OPEN_ERR, 
+                         msg.str() ) );
+                         
+
+         fclose( sourceFile );
          return (WOS_PUT_ERR);
       }
    }
    rodsLog(LOG_DEBUG,"In putTheFile: code: %d, oid: %s\n", 
            headerP->x_ddn_status, headerP->x_ddn_oid);
    curl_easy_cleanup(theCurl);
+   fclose( sourceFile );
    return (int) res;
+
 }
 
 /** 
@@ -408,7 +426,7 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
  * @return res.  The return code from curl_easy_perform.
  */
 
-int 
+static int 
 getTheFile (const char *resource, const char *file, const char *destination, int mode,
             WOS_HEADERS_P headerP) {
    CURLcode res;
@@ -470,11 +488,14 @@ getTheFile (const char *resource, const char *file, const char *destination, int
    // library
    destFd = open(destination, O_WRONLY | O_CREAT | O_TRUNC, mode);
    if (destFd < 0) {
+      curl_easy_cleanup(theCurl);
       return(UNIX_FILE_OPEN_ERR - errno);
    } else {
       destFile = fdopen(destFd, "wb");
       if (!destFile) {
          // Couldn't convert index to descriptor.  Seems unlikely ...
+         curl_easy_cleanup(theCurl);
+         fclose( destFile );
          return(UNIX_FILE_OPEN_ERR - errno);
       } else {
          curl_easy_setopt(theCurl, CURLOPT_FILE, destFile);
@@ -482,6 +503,8 @@ getTheFile (const char *resource, const char *file, const char *destination, int
          if (res) {
             // an error in lib curl
             unlink(destination);
+            curl_easy_cleanup(theCurl);
+            fclose( destFile );
             return(WOS_GET_ERR);
          }
       } 
@@ -514,7 +537,7 @@ getTheFile (const char *resource, const char *file, const char *destination, int
  * @return res.  The return code from curl_easy_perform.
  */
 
-int 
+static int 
 getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP) {
    CURLcode res;
    CURL *theCurl;
@@ -566,6 +589,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
    // Call the operation
    res = curl_easy_perform(theCurl);
    if (res) {
+      curl_easy_cleanup(theCurl);
       return(WOS_GET_ERR);
    }
 
@@ -591,7 +615,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
  * @param headerP A pointer to WOS_HEADERS structure that will be filled in.
  * @return res.  The return code from curl_easy_perform.
  */
-
+static 
 int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP) {
    rodsLog(LOG_DEBUG,"getting ready to delete the file\n");
    CURLcode res;
@@ -647,6 +671,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
 
    res = curl_easy_perform(theCurl);
    if (res) {
+      curl_easy_cleanup(theCurl);
       return(WOS_UNLINK_ERR);
    }
 
@@ -758,48 +783,63 @@ int processTheStatJSON(char *jsonP, WOS_STATISTICS_P statP) {
  */
 
 
-int 
-getTheManagementData(char *resource, char *user, char *password,
-                     WOS_STATISTICS_P statsP) {
-   CURLcode   res;
-   CURL *theCurl;
-   WOS_MEMORY theData;
-   char       auth[(WOS_AUTH_LENGTH * 2) + 1];
+static int 
+getTheManagementData( 
+    const char *resource,  
+    const char *user,  
+    const char *password,
+    WOS_STATISTICS_P statsP) {
+    CURLcode   res;
+    CURL *theCurl;
+    WOS_MEMORY theData;
+    char       auth[(WOS_AUTH_LENGTH * 2) + 1];
 
-   // Initialize lib curl
-   theCurl = curl_easy_init();
+    // Initialize lib curl
+    theCurl = curl_easy_init();
 
-   // Init the memory struct
-   theData.data = NULL;
-   theData.size = 0;
+    // Init the memory struct
+    theData.data = NULL;
+    theData.size = 0;
 
-   // Copy the resource into the URL
-   curl_easy_setopt(theCurl, CURLOPT_URL, resource);
+    // Copy the resource into the URL
+    curl_easy_setopt(theCurl, CURLOPT_URL, resource);
 
-   // Let's not dump the header or be verbose
-   curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
-   curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
+    // Let's not dump the header or be verbose
+    curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
 
-   // assign the write function and the pointer
-   curl_easy_setopt(theCurl, CURLOPT_WRITEFUNCTION, writeTheDataToMemory);
-   curl_easy_setopt(theCurl, CURLOPT_WRITEDATA, &theData);
+    // assign the write function and the pointer
+    curl_easy_setopt(theCurl, CURLOPT_WRITEFUNCTION, writeTheDataToMemory);
+    curl_easy_setopt(theCurl, CURLOPT_WRITEDATA, &theData);
 
-   // Add the user name and password
-   sprintf(auth, "%s:%s", user, password);
-   curl_easy_setopt(theCurl, CURLOPT_USERPWD, auth);
-   curl_easy_setopt(theCurl, CURLOPT_HTTPAUTH, (long) CURLAUTH_ANY);
+    // Add the user name and password
+    sprintf(auth, "%s:%s", user, password);
+    curl_easy_setopt(theCurl, CURLOPT_USERPWD, auth);
+    curl_easy_setopt(theCurl, CURLOPT_HTTPAUTH, (long) CURLAUTH_ANY);
   
-   res = curl_easy_perform(theCurl);
-   if (res) {
-      // libcurl error
-      return(WOS_GET_ERR);
-   }
+    res = curl_easy_perform(theCurl);
+    if (res) {
+       // libcurl error
+       return(WOS_GET_ERR);
+    }
 
-   res = (CURLcode) processTheStatJSON(theData.data, statsP);
+    res = (CURLcode) processTheStatJSON(theData.data, statsP);
+   
+    curl_easy_cleanup(theCurl);
 
-   return((int) res);
+    return((int) res);
+}
+#else
+static int 
+getTheManagementData( 
+    const char *resource,  
+    const char *user,  
+    const char *password,
+    WOS_STATISTICS_P statsP) {
+    return 0;
 }
 #endif
+
 
 // =-=-=-=-=-=-=-
 /// @brief Checks the basic operation parameters and updates the physical path in the file object
@@ -1559,8 +1599,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     class wos_resource : public irods::resource {
     public:
-         wos_resource( const std::string& _inst_name,
-                       const std::string& _context ) :
+        wos_resource( const std::string& _inst_name,
+                const std::string& _context ) :
             irods::resource( _inst_name, _context ) {
             // =-=-=-=-=-=-=-
             // parse context string into property pairs assuming a ; as a separator
@@ -1606,8 +1646,15 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             return SUCCESS();
         }
 
+
+        ~wos_resource() {
+             rodsLog( LOG_NOTICE, "calling WOS destructor" );
+        }
+
     }; // class wos_resource
 
+    int some_other_fcn(
+        irods::resource_plugin_context&  _ctx ) {}
 
     // =-=-=-=-=-=-=-
     // Create the plugin factory function which will return a microservice
@@ -1616,7 +1663,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // service.  this will be called by the plugin loader in the irods server
     // to create the entry to the table when the plugin is requested.
     irods::resource* plugin_factory(const std::string& _inst_name, const std::string& _context) {
-        wos_resource* resc = new wos_resource(_inst_name, _context);
+        wos_resource* resc = new wos_resource( _inst_name, _context );
+        resc->add_operation( "some_other_fcn", "some_other_fcn" );
 
         resc->add_operation( irods::RESOURCE_OP_CREATE,       "wosFileCreatePlugin" );
         resc->add_operation( irods::RESOURCE_OP_OPEN,         "wosFileOpenPlugin" );
@@ -1647,8 +1695,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         resc->set_property< int >( "create_path",     NO_CREATE_PATH );
         resc->set_property< int >( "category",        FILE_CAT );
 
-        //return dynamic_cast<irods::resource*>( resc );
-        return dynamic_cast<irods::resource *> (resc);
+        return dynamic_cast<irods::resource *>( resc );
+
     } // plugin_factory
 
 
