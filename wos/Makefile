@@ -1,9 +1,9 @@
 
 
-BOOST_LIBS = /usr/lib/irods/libboost_system.a \
-             /usr/lib/irods/libboost_filesystem.a \
-             /usr/lib/irods/libboost_regex.a \
-             /usr/lib/irods/libboost_thread.a
+BOOST_LIBS = /usr/lib/irods/externals/libboost_system.a \
+             /usr/lib/irods/externals/libboost_filesystem.a \
+             /usr/lib/irods/externals/libboost_regex.a \
+             /usr/lib/irods/externals/libboost_thread.a
 
 TARGET = libwos.so
 
@@ -11,7 +11,7 @@ SRCS = libwos.cpp
 
 HEADERS = curlWosFunctions.h
 
-EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/irods/libirods_client.a
+EXTRALIBS = -L/usr/lib64 -lcurl ${BOOST_LIBS} /usr/lib/libirods_client.a
 
 EXTRAINCS = 
 
@@ -31,7 +31,7 @@ DEPS = $(patsubst %.cpp, ${DEPDIR}/%.d, ${SRCS})
 
 GCC = g++ -DRODS_SERVER
 
-INC = -I/usr/include/irods ${EXTRAINCS}
+INC = -I/usr/include/irods -I/usr/include/irods/boost ${EXTRAINCS}
 
 .PHONY: clean
 

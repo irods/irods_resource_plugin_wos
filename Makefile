@@ -3,7 +3,7 @@ SUBS = 	wos
 ######################################################################
 # Configuration should occur above this line
 
-GCC = g++ -DRODS_SERVER -DZIP_EXEC_PATH=\"$(ZIP_EXEC_PATH)\" -DUNZIP_EXEC_PATH=\"$(UNZIP_EXEC_PATH)\"
+GCC = g++ -DRODS_SERVER 
 
 .PHONY: ${SUBS} clean
 

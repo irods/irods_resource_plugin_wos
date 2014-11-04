@@ -292,116 +292,105 @@ static size_t readTheData(void *ptr, size_t size, size_t nmemb, void *stream)
   return retcode;
 }
 
-/** 
- * @brief This function is the high level function that adds a data file
- *        to the DDN storage using the WOS interface.
- *
- *  This function uses the libcurl API to POST the specified file
- *  to the DDN using the WOS interface. See http://curl.haxx.se/libcurl/
- *  for information about libcurl.
- *
- * @param resource A character pointer to the resource for this request.
- * @param policy A character pointer to the policy for this request.
- * @param file A character pointer to the file for this request.
- * @param headerP A pointer to WOS_HEADERS structure that will be filled in.
- * @return res.  The return code from curl_easy_perform.
- */
+
 static int 
-putTheFile (const char *resource, const char *policy, const char *file, WOS_HEADERS_P headerP) {
-   CURLcode res;
-   CURL *theCurl;
-   time_t now;
-   struct tm *theTM;
-   struct stat sourceFileInfo;
-   FILE  *sourceFile;
-   char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
-   char dateHeader[WOS_DATE_LENGTH];
-   char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
-   char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
- 
-   // The headers
-   struct curl_slist *headers = NULL;
-   
-   // Initialize lib curl
-   theCurl = curl_easy_init();
+putNonZeroFile(
+    const char*   resource, 
+    const char*   policy, 
+    const char*   file, 
+    WOS_HEADERS_P headerP) {
+    CURLcode res;
+    CURL *theCurl;
+    time_t now;
+    struct tm *theTM;
+    struct stat sourceFileInfo;
+    FILE  *sourceFile;
+    char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
+    char dateHeader[WOS_DATE_LENGTH];
+    char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
+    char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
 
-   // Create the date header
-   now = time(NULL);
-   theTM = gmtime(&now);
-   strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
+     
 
-   // Set the operation
-   curl_easy_setopt(theCurl, CURLOPT_POST, 1);
-   
-   // construct the url from the resource and the put command
-   sprintf(theURL, "%s%s", resource, WOS_COMMAND_PUT);
-   rodsLog(LOG_DEBUG,"theURL: %s\n", theURL);
-   curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
+    // The headers
+    struct curl_slist *headers = NULL;
 
-   // Let's not dump the header or be verbose
-   curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
-   curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
+    // Initialize lib curl
+    theCurl = curl_easy_init();
 
-   // assign the read function
-   curl_easy_setopt(theCurl, CURLOPT_READFUNCTION, readTheData);
+    // Create the date header
+    now = time(NULL);
+    theTM = gmtime(&now);
+    strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
 
-   // assign the result header function and it's user data
-   curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
-   curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
+    // Set the operation
+    curl_easy_setopt(theCurl, CURLOPT_POST, 1);
 
-   // Set connection timeout (seconds)
-   curl_easy_setopt(theCurl, CURLOPT_CONNECTTIMEOUT, (long) CONNECT_TIMEOUT);
+    // Let's not dump the header or be verbose
+    curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
 
-   // We need the size of the destination file. Let's do a stat command
-   if (stat(file, &sourceFileInfo)){
-      rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
-             file, errno);
-      curl_easy_cleanup(theCurl);
-      return(RE_FILE_STAT_ERROR - errno);
-   }
+    // assign the read function
+    curl_easy_setopt(theCurl, CURLOPT_READFUNCTION, readTheData);
 
-   // Make the content length header
-   sprintf(contentLengthHeader, "%s%ld", 
-          WOS_CONTENT_LENGTH_PUT_HEADER,
-          (long) (sourceFileInfo.st_size));
+    // assign the result header function and it's user data
+    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
+    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
 
-   // Make the policy header
-   sprintf(policyHeader, "%s %s", WOS_POLICY_HEADER, policy);
+    // We need the size of the destination file. Let's do a stat command
+    if (stat(file, &sourceFileInfo)){
+        rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
+                file, errno);
+        curl_easy_cleanup(theCurl);
+        return(RE_FILE_STAT_ERROR - errno);
+    }
 
-   // assign the data size
-   curl_easy_setopt(theCurl, 
-                    CURLOPT_POSTFIELDSIZE_LARGE, 
-                    (curl_off_t) sourceFileInfo.st_size);
-   
-   // Now add the headers
-   headers = curl_slist_append(headers, dateHeader);
-   headers = curl_slist_append(headers, contentLengthHeader);
-   headers = curl_slist_append(headers, policyHeader);
-   headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
-   
-   // Stuff the headers into the request
-   curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+    sprintf(theURL, "%s%s", resource, WOS_COMMAND_PUT);
 
-   // Open the destination file so the handle can be passed to the
-   // read function
-   sourceFile = fopen(file, "rb");
-   if (!sourceFile) {
-      curl_easy_cleanup(theCurl);
-      fclose( sourceFile );
-      std::string msg( "failed to open file [" );
-      msg += file;
-      msg += "]";
-      irods::log( ERROR( UNIX_FILE_OPEN_ERR, msg ) );
-      return(UNIX_FILE_OPEN_ERR - errno);
-   } else {
+    rodsLog(LOG_DEBUG,"theURL: %s\n", theURL);
+    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
+
+    // Make the content length header
+    sprintf(contentLengthHeader, "%s%ld", 
+            WOS_CONTENT_LENGTH_PUT_HEADER,
+            (long) (sourceFileInfo.st_size));
+
+    // Make the policy header
+    sprintf(policyHeader, "%s %s", WOS_POLICY_HEADER, policy);
+
+    // assign the data size
+    curl_easy_setopt(theCurl, 
+            CURLOPT_POSTFIELDSIZE_LARGE, 
+            (curl_off_t) sourceFileInfo.st_size);
+
+    // Now add the headers
+    headers = curl_slist_append(headers, dateHeader);
+    headers = curl_slist_append(headers, contentLengthHeader);
+    headers = curl_slist_append(headers, policyHeader);
+    headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
+
+    // Stuff the headers into the request
+    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+
+    // Open the destination file so the handle can be passed to the
+    // read function
+    sourceFile = fopen(file, "rb");
+    if (!sourceFile) {
+        curl_easy_cleanup(theCurl);
+        fclose( sourceFile );
+        std::string msg( "failed to open file [" );
+        msg += file;
+        msg += "]";
+        irods::log( ERROR( UNIX_FILE_OPEN_ERR, msg ) );
+        return(UNIX_FILE_OPEN_ERR - errno);
+    } else {
        curl_easy_setopt(theCurl, CURLOPT_READDATA, sourceFile);
        bool   put_done_flg = false;
        size_t retry_cnt    = 0;
 
        while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
-
-           res = curl_easy_perform(theCurl);
-           if( res ) {
+            res = curl_easy_perform(theCurl);
+            if( res ) {
                // An error in libcurl
                std::stringstream msg;
                msg << "error putting the WOS object \"";
@@ -420,8 +409,8 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
                            msg.str() ) );
 
                retry_cnt++;
-           
-           } else {
+                
+            } else {
                // libcurl return success
                put_done_flg = true;
            
@@ -441,13 +430,333 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
            fclose( sourceFile );
            return (WOS_PUT_ERR);
        }
-   }
-   rodsLog(LOG_DEBUG,"In putTheFile: code: %d, oid: %s\n", 
-           headerP->x_ddn_status, headerP->x_ddn_oid);
-   curl_easy_cleanup(theCurl);
-   fclose( sourceFile );
-   return (int) res;
 
+    }
+    rodsLog(LOG_DEBUG,"In putNonZeroFile: code: %d, oid: %s\n", 
+            headerP->x_ddn_status, headerP->x_ddn_oid);
+    curl_easy_cleanup(theCurl);
+    fclose( sourceFile );
+    return (int) res;
+
+}
+
+static int 
+overwriteZeroFile(
+    const char*   resource, 
+    const char*   policy, 
+    const char*   file, 
+    const char*   wos_oid, 
+    WOS_HEADERS_P headerP) {
+    CURLcode res;
+    CURL *theCurl;
+    time_t now;
+    struct tm *theTM;
+    struct stat sourceFileInfo;
+    FILE  *sourceFile;
+    char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
+    char dateHeader[WOS_DATE_LENGTH];
+    char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
+    char oidHeader[WOS_FILE_LENGTH];
+    char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
+    // The headers
+    struct curl_slist *headers = NULL;
+
+    // Initialize lib curl
+    theCurl = curl_easy_init();
+
+    // Create the date header
+    now = time(NULL);
+    theTM = gmtime(&now);
+    strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
+
+    // Set the operation
+    curl_easy_setopt(theCurl, CURLOPT_POST, 1);
+
+    // Let's not dump the header or be verbose
+    curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
+
+    // assign the read function
+    curl_easy_setopt(theCurl, CURLOPT_READFUNCTION, readTheData);
+
+    // assign the result header function and it's user data
+    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
+    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
+
+    // We need the size of the destination file. Let's do a stat command
+    if (stat(file, &sourceFileInfo)){
+        rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
+                file, errno);
+        curl_easy_cleanup(theCurl);
+        return(RE_FILE_STAT_ERROR - errno);
+    }
+
+    sprintf(theURL, "%s%s", resource, WOS_COMMAND_PUTOID);
+    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
+
+    // Make the content length header
+    sprintf(contentLengthHeader, "%s%ld", 
+            WOS_CONTENT_LENGTH_PUT_HEADER,
+            (long) (sourceFileInfo.st_size));
+   
+   // Make the OID header
+   sprintf(oidHeader, "%s %s", WOS_OID_HEADER, wos_oid);
+
+    // Make the policy header
+    sprintf(policyHeader, "%s %s", WOS_POLICY_HEADER, policy);
+
+    // assign the data size
+    curl_easy_setopt(theCurl, 
+            CURLOPT_POSTFIELDSIZE_LARGE, 
+            (curl_off_t) sourceFileInfo.st_size);
+
+    // Now add the headers
+    headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
+    headers = curl_slist_append(headers, contentLengthHeader);
+    headers = curl_slist_append(headers, dateHeader);
+    headers = curl_slist_append(headers, oidHeader);
+
+    rodsLog(
+        LOG_NOTICE,//LOG_DEBUG,
+        "overwriteZeroFile theURL: [%s] type [%s] len [%s] date [%s] oid [%s]\n", 
+        theURL, WOS_CONTENT_TYPE_HEADER, contentLengthHeader, dateHeader, oidHeader );
+
+    // Stuff the headers into the request
+    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+
+    // Open the destination file so the handle can be passed to the
+    // read function
+    sourceFile = fopen(file, "rb");
+    if (!sourceFile) {
+        curl_easy_cleanup(theCurl);
+        fclose( sourceFile );
+        std::string msg( "failed to open file [" );
+        msg += file;
+        msg += "]";
+        irods::log( ERROR( UNIX_FILE_OPEN_ERR, msg ) );
+        return(UNIX_FILE_OPEN_ERR - errno);
+    } else {
+       curl_easy_setopt(theCurl, CURLOPT_READDATA, sourceFile);
+       bool   put_done_flg = false;
+       size_t retry_cnt    = 0;
+
+       while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
+            res = curl_easy_perform(theCurl);
+            if( res ) {
+               // An error in libcurl
+               std::stringstream msg;
+               msg << "error putting the WOS object \"";
+               msg << file;
+               msg << "\" with curl_easy_perform status ";
+               msg << res;
+               msg << " (";
+               msg << retry_cnt+1;
+               msg << " of ";
+               msg << RETRY_COUNT;
+               msg << " retries ). Retry in ";
+               msg << (long) CONNECT_TIMEOUT;
+               msg << " seconds.";
+               irods::log( ERROR(
+                           WOS_PUT_ERR,
+                           msg.str() ) );
+
+               retry_cnt++;
+                
+            } else {
+               // libcurl return success
+               put_done_flg = true;
+           
+           }
+       }
+
+       if( put_done_flg != true ) {
+           curl_easy_cleanup(theCurl);
+           std::stringstream msg;
+           msg << "failed to call curl_easy_perform - ";
+           msg << res; 
+           irods::log( ERROR( 
+                       WOS_PUT_ERR, 
+                       msg.str() ) );
+
+
+           fclose( sourceFile );
+           return (WOS_PUT_ERR);
+       }
+
+    }
+    rodsLog(
+        LOG_NOTICE,//LOG_DEBUG,
+        "In overwriteZeroFile: code: %d, oid: %s\n", 
+        headerP->x_ddn_status, 
+        headerP->x_ddn_oid);
+    curl_easy_cleanup(theCurl);
+    fclose( sourceFile );
+
+    return (int) res;
+
+}
+
+static int 
+registerZeroFile(
+    const char*   resource, 
+    const char*   policy, 
+    const char*   file, 
+    WOS_HEADERS_P headerP) {
+    CURLcode res;
+    CURL *theCurl;
+    time_t now;
+    struct tm *theTM;
+    struct stat sourceFileInfo;
+    FILE  *sourceFile;
+    char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
+    char dateHeader[WOS_DATE_LENGTH];
+    char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
+    char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
+
+    // The headers
+    struct curl_slist *headers = NULL;
+
+    // Initialize lib curl
+    theCurl = curl_easy_init();
+
+    // Create the date header
+    now = time(NULL);
+    theTM = gmtime(&now);
+    strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
+
+    // Set the operation
+    curl_easy_setopt(theCurl, CURLOPT_POST, 1);
+
+    // Let's not dump the header or be verbose
+    curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
+
+    // assign the read function
+    curl_easy_setopt(theCurl, CURLOPT_READFUNCTION, readTheData);
+
+    // assign the result header function and it's user data
+    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
+    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
+
+    sprintf(theURL, "%s%s", resource, WOS_COMMAND_RESERVE);
+
+    rodsLog(LOG_DEBUG,"theURL: %s\n", theURL);
+    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
+
+    // Make the policy header
+    sprintf(policyHeader, "%s %s", WOS_POLICY_HEADER, policy);
+
+    // Now add the headers
+    headers = curl_slist_append(headers, dateHeader);
+    headers = curl_slist_append(headers, policyHeader);
+    headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
+
+    // Stuff the headers into the request
+    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+
+    res = curl_easy_perform(theCurl);
+    if (res) {
+        // An error in libcurl
+        curl_easy_cleanup(theCurl);
+
+        std::stringstream msg;
+        msg << "failed to call curl_easy_perform - ";
+        msg << res; 
+        irods::log( ERROR( 
+                    UNIX_FILE_OPEN_ERR, 
+                    msg.str() ) );
+
+        fclose( sourceFile );
+        return (WOS_PUT_ERR);
+    }
+    
+    rodsLog(
+        LOG_NOTICE,//LOG_DEBUG,
+        "In registerZeroFile: code: %d, oid: %s\n", 
+        headerP->x_ddn_status, 
+        headerP->x_ddn_oid);
+    curl_easy_cleanup(theCurl);
+    return (int) res;
+
+}
+
+/** 
+ * @brief This function is the high level function that adds a data file
+ *        to the DDN storage using the WOS interface.
+ *
+ *  This function uses the libcurl API to POST the specified file
+ *  to the DDN using the WOS interface. See http://curl.haxx.se/libcurl/
+ *  for information about libcurl.
+ *
+ * @param resource A character pointer to the resource for this request.
+ * @param policy A character pointer to the policy for this request.
+ * @param file A character pointer to the file for this request.
+ * @param headerP A pointer to WOS_HEADERS structure that will be filled in.
+ * @return res.  The return code from curl_easy_perform.
+ */
+static int putTheFile(
+    const char*   resource, 
+    const char*   policy, 
+    const char*   file, 
+    const char*   prev_oid, 
+    WOS_HEADERS_P headerP) {
+
+    WOS_HEADERS theHeaders;
+    std::string wos_oid;
+    bool file_on_wos = false;
+
+    // =-=-=-=-=-=-=-
+    // We need the size of the destination file. Let's do a stat command
+    struct stat sourceFileInfo;
+    memset( &sourceFileInfo, 0, sizeof( sourceFileInfo ) );
+    if (stat(file, &sourceFileInfo)){
+        rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
+                file, errno);
+        return(RE_FILE_STAT_ERROR - errno);
+    }
+
+    // =-=-=-=-=-=-=-
+    // stat the WOS file, if it exists on the wos system we need to check 
+    // the size.  a size of 0 requires a different WOS call.
+    int status = 1;
+    std::string prev_oid_str( prev_oid );
+    // only query if we have a valid oid ( no path separators )
+    if (std::string::npos == prev_oid_str.find( "/" ) ) {
+        status = getTheFileStatus( 
+                     resource, 
+                     prev_oid,
+                     &theHeaders);
+    }
+
+    // returns non-zero on error.
+    if( !status ) {
+        wos_oid      = theHeaders.x_ddn_oid;
+        file_on_wos  = true;
+    }
+
+    if( file_on_wos && WOS_UNUSED_RESERVATION == theHeaders.x_ddn_status ) {
+        status = overwriteZeroFile(
+                     resource,
+                     policy,
+                     file,
+                     wos_oid.c_str(),
+                     headerP );
+    }
+    else if( !file_on_wos && 0 == sourceFileInfo.st_size ) {
+        status = registerZeroFile(
+                     resource,
+                     policy,
+                     file,
+                     headerP );
+    } else {
+        status = putNonZeroFile(
+                     resource,
+                     policy,
+                     file,
+                     headerP );
+    }
+
+    return status;
 }
 
 /** 
@@ -630,7 +939,6 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
    CURL *theCurl;
    time_t now;
    struct tm *theTM;
- 
    // Initialize lib curl
    theCurl = curl_easy_init();
 
@@ -680,11 +988,15 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
       return(WOS_GET_ERR);
    }
 
-   rodsLog(LOG_DEBUG, "In getTheFileStatus: code: %d, string: %s length: %ld\n", 
-          headerP->x_ddn_status, headerP->x_ddn_status_string, 
-          headerP->x_ddn_length);
+   rodsLog(
+       LOG_NOTICE,//LOG_DEBUG, 
+       "In getTheFileStatus: code: %d, string: %s length: %ld\n", 
+       headerP->x_ddn_status, 
+       headerP->x_ddn_status_string, 
+       headerP->x_ddn_length);
 
    curl_easy_cleanup(theCurl);
+
    return (int) res;
 }
 
@@ -1084,8 +1396,9 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Stat
-    irods::error wosFileStatPlugin(  irods::resource_plugin_context& _ctx,
-                                      struct stat*        _statbuf ) { 
+    irods::error wosFileStatPlugin(
+        irods::resource_plugin_context& _ctx,
+        struct stat*                    _statbuf ) { 
         rodsLong_t len;
         int status = 0;
         const char *wos_host;
@@ -1108,7 +1421,12 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
               // =-=-=-=-=-=-=-
               // get ref to data object
               irods::data_object_ptr object = boost::dynamic_pointer_cast< irods::data_object >( _ctx.fco() );
-      
+
+             rodsLog( 
+                 LOG_NOTICE,//LOG_DEBUG
+                 "wosFileStatPlugin :: [%s]",
+                 object->physical_path().c_str() );
+
              // Call the WOS function
               status = getTheFileStatus(wos_host, object->physical_path().c_str(), &theHeaders);
       
@@ -1119,7 +1437,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
              
                  // Fill in the rest of the struct.  Note that this code is carried over
                  // from the original code.
-                 if (len >= 0) {
+                 if (len >= 0 && theHeaders.x_ddn_status == 0 ) {
                     _statbuf->st_mode = S_IFREG;
                     _statbuf->st_nlink = 1;
                     _statbuf->st_uid = getuid ();
@@ -1128,7 +1446,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
                     _statbuf->st_size = len;
                  }
               } else {
-                result =  ERROR( status, "wosFileStatPlugin - error in getTheFileStatus");
+                result =  ERROR( theHeaders.x_ddn_status, "wosFileStatPlugin - error in getTheFileStatus");
               } 
            }
         }
@@ -1337,8 +1655,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // is not used.
     irods::error wosSyncToArchPlugin( 
         irods::resource_plugin_context& _ctx,
-        char*                            _cache_file_name ) {
-
+        char*                           _cache_file_name ) {
         int status;
         struct stat fileStatus;
         const char *wos_host;
@@ -1364,27 +1681,30 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
               if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
                  wos_policy = my_policy.c_str();
                  irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
-
-                 status = putTheFile(wos_host, wos_policy, (const char *)_cache_file_name, &theHeaders);
+                 status = putTheFile(
+                              wos_host, 
+                              wos_policy, 
+                              (const char *)_cache_file_name, 
+                              file_obj->physical_path().c_str(),
+                              &theHeaders);
                  // returns non-zero on error.
                  if (!status) {
-                    if (std::string::npos == file_obj->physical_path().find(irods::EMPTY_RESC_PATH)) {
-                        // delete the file corresponding to the existing OID
-                        status = deleteTheFile(wos_host, file_obj->physical_path().c_str(), &deleteHeaders);
+                    // We want to set the new physical path
+                    if( strlen( theHeaders.x_ddn_oid ) > 0 ) {
+                        file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
+                    } else {
+                        result = ERROR( status, "wosSyncToArchPlugin - OID string is empty");
                     }
-         
-                    // We want to set the new physical path no matter even if the delete failed.
-                    file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
-                    if (status) {
-                        result = ERROR( status, "wosSyncToArchPlugin - error in deleteTheFile");
-                    }      
+
                  } else {
                      result =  ERROR( status, "wosSyncToArchPlugin - error in putTheFile");
                  }
               }
            }
         }
+
         return result;
+
     } // wosSyncToArchPlugin
 
     // =-=-=-=-=-=-=-
@@ -1548,13 +1868,11 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         strncpy( dst_data_obj.objPath,       itr->name().c_str(),             MAX_NAME_LEN );
         strncpy( dst_data_obj.rescName,      root_resc.c_str(),               NAME_LEN );
         strncpy( dst_data_obj.rescHier,      get_hier_out->resc_hier_,        MAX_NAME_LEN );
-        strncpy( dst_data_obj.rescGroupName, root_resc.c_str(),               NAME_LEN );
         strncpy( dst_data_obj.dataType,      itr->type_name( ).c_str(),       NAME_LEN );
         dst_data_obj.dataSize = itr->size( );
         strncpy( dst_data_obj.chksum,        itr->checksum( ).c_str(),        NAME_LEN );
         strncpy( dst_data_obj.version,       itr->version( ).c_str(),         NAME_LEN );
         strncpy( dst_data_obj.filePath,      obj_id.c_str(),                  MAX_NAME_LEN );
-        dst_data_obj.rescInfo    = 0; // JMC - possible issue
         strncpy( dst_data_obj.dataOwnerName, itr->owner_name( ).c_str(),      NAME_LEN );
         strncpy( dst_data_obj.dataOwnerZone, itr->owner_zone( ).c_str(),      NAME_LEN );
         dst_data_obj.replNum    = max_repl_num+1;

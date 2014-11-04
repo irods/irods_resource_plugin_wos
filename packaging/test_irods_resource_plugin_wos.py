@@ -40,6 +40,22 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         shutil.rmtree(lib.get_irods_top_level_dir() + "/archiveRescVault", ignore_errors=True)
         shutil.rmtree(lib.get_irods_top_level_dir() + "/cacheRescVault", ignore_errors=True)
 
+    def test_empty_files(self):
+        # set up
+        filename = "some_test_file.txt"
+        filepath = lib.create_local_testfile(filename)
+
+        emptyfile = "emptyfile.txt"
+        lib.assert_command("touch "+emptyfile)
+
+        # test it
+        self.admin.assert_icommand("iput "+emptyfile)
+        self.admin.assert_icommand("iput -f "+filepath+" "+emptyfile)
+        self.admin.assert_icommand("ils -L "+" "+emptyfile,"STDOUT_MULTILINE",[" 0 demoResc;cacheResc           63 ", " 1 demoResc;archiveResc           63 "])
+
+        os.remove(filepath)
+        os.remove(emptyfile)
+
     def test_retry_for_put(self):
         # set up
         self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=10")

@@ -56,6 +56,7 @@
 #define WOS_INVALID_OBJECT_SIZE 212
 #define WOS_MISSING_OBJECT 213
 #define WOS_TEMPORARILY_NOT_SUPPORTED 214
+#define WOS_UNUSED_RESERVATION 219
 ///@}
 
 /** @name WOS operations.
@@ -66,6 +67,8 @@
 #define WOS_COMMAND_GET "/cmd/get"
 #define WOS_COMMAND_PUT "/cmd/put"
 #define WOS_COMMAND_DELETE "/cmd/delete"
+#define WOS_COMMAND_RESERVE "/cmd/reserve"
+#define WOS_COMMAND_PUTOID "/cmd/putoid"
 ///@}
 
 /** @name Misc WOS Defines
@@ -129,7 +132,7 @@ typedef struct WOS_STATISTICS_TYPE {
 extern "C" {
 
 static int 
-putTheFile (const char *resource, const char *policy, const char *file, WOS_HEADERS_P headerP);
+putTheFile (const char *resource, const char *policy, const char *file, const char* prev_oid, WOS_HEADERS_P headerP);
 static int 
 getTheFile (const char *resource, const char *file, const char *destination, int mode,
             WOS_HEADERS_P headerP);
