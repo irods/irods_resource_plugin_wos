@@ -55,6 +55,8 @@
 #include <vector>
 #include <string>
 
+#include "boost/lexical_cast.hpp"
+
 // =-=-=-=-=-=-=-
 // system includes
 #ifndef _WIN32
@@ -90,7 +92,11 @@
 
 #include <string.h>
 
+const size_t MAX_RETRY_COUNT = 100;
+size_t RETRY_COUNT = 3;
+
 extern "C" {
+static const std::string NUM_RETRIES_KEY( "num_retries" );
 static const std::string WOS_HOST_KEY( "wos_host" );
 static const std::string WOS_POLICY_KEY( "wos_policy" );
 static const std::string REPL_POLICY_KEY( "repl_policy" );
@@ -381,23 +387,53 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
       irods::log( ERROR( UNIX_FILE_OPEN_ERR, msg ) );
       return(UNIX_FILE_OPEN_ERR - errno);
    } else {
-      curl_easy_setopt(theCurl, CURLOPT_READDATA, sourceFile);
-      res = curl_easy_perform(theCurl);
-      if (res) {
-         // An error in libcurl
-         curl_easy_cleanup(theCurl);
+       curl_easy_setopt(theCurl, CURLOPT_READDATA, sourceFile);
+       bool   put_done_flg = false;
+       size_t retry_cnt    = 0;
 
-         std::stringstream msg;
-         msg << "failed to call curl_easy_perform - ";
-         msg << res; 
-         irods::log( ERROR( 
-                         UNIX_FILE_OPEN_ERR, 
-                         msg.str() ) );
-                         
+       while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
 
-         fclose( sourceFile );
-         return (WOS_PUT_ERR);
-      }
+           res = curl_easy_perform(theCurl);
+           if( res ) {
+               // An error in libcurl
+               // curl_easy_cleanup(theCurl);
+
+               std::stringstream msg;
+               msg << "error putting the WOS object \"";
+               msg << file;
+               msg << "\" with curl_easy_perform status ";
+               msg << res;
+               msg << " (";
+               msg << retry_cnt+1;
+               msg << " of ";
+               msg << RETRY_COUNT;
+               msg << " retries )";
+               irods::log( ERROR(
+                           WOS_PUT_ERR,
+                           msg.str() ) );
+
+               retry_cnt++;
+           
+           } else {
+               // libcurl return success
+               put_done_flg = true;
+           
+           }
+       }
+
+       if( put_done_flg != true ) {
+           curl_easy_cleanup(theCurl);
+           std::stringstream msg;
+           msg << "failed to call curl_easy_perform - ";
+           msg << res; 
+           irods::log( ERROR( 
+                       UNIX_FILE_OPEN_ERR, 
+                       msg.str() ) );
+
+
+           fclose( sourceFile );
+           return (WOS_PUT_ERR);
+       }
    }
    rodsLog(LOG_DEBUG,"In putTheFile: code: %d, oid: %s\n", 
            headerP->x_ddn_status, headerP->x_ddn_oid);
@@ -1630,6 +1666,32 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
                 std::stringstream msg;
                 rodsLog( LOG_NOTICE, "prop_map has no wos_host " );
             }
+
+            std::string retry_str; 
+            prop_ret = properties_.get< std::string >( NUM_RETRIES_KEY, retry_str );
+            if( prop_ret.ok() ) {
+                size_t retry_sz = 0;
+                try {
+                    retry_sz = boost::lexical_cast< size_t >( retry_str );
+                    if( retry_sz <= MAX_RETRY_COUNT ) { 
+                        RETRY_COUNT = retry_sz;
+                    } else {
+                        rodsLog( 
+                            LOG_ERROR, 
+                            "wos_resource - retry count %ld, exceeded max %ld",
+                            retry_sz,
+                            MAX_RETRY_COUNT );
+                    }
+
+                } catch( boost::bad_lexical_cast e ) {
+                        rodsLog( 
+                            LOG_ERROR,
+                            "wos_resource - failed to lexical cast [%s] to size_t",
+                            retry_str.c_str() );
+                }
+
+            }
+
 
         } // ctor
 
