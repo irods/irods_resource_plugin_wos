@@ -48,6 +48,47 @@ class Test_Compound_with_WOS_Resource(unittest.TestCase, ResourceSuite, ChunkyDe
         self.run_resource_teardown()
         s.twousers_down()
 
+    def test_retry_for_put(self):
+        # set up 
+        assertiCmd(s.adminsession,"iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=10") 
+        filename = "some_test_file.txt"
+        filepath = create_local_testfile(filename)
+        
+        # test it
+        assertiCmd(s.adminsession, "iput -f "+filepath, "ERROR", "WOS_PUT_ERR") 
+
+        # verify it
+        p = subprocess.Popen(['grep "WOS_PUT_ERR"  ../../iRODS/server/log/rodsLog.* | grep "10 of 10"'], shell=True, stdout=subprocess.PIPE)
+        result = p.communicate()[0]
+        assert( -1 != result.find( "10 of 10" ) )
+       
+        # clean up 
+        assertiCmd(s.adminsession,"iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard") 
+        os.remove(filepath)
+
+    def test_retry_for_get(self):
+        # set up 
+        filename = "some_test_file.txt"
+        filepath = create_local_testfile(filename)
+        assertiCmd(s.adminsession,"iput "+filepath )
+        assertiCmd(s.adminsession,"ils -l", "LIST", "tempZone")
+        assertiCmd(s.adminsession,"itrim -N1 -n0 "+filename )
+        assertiCmd(s.adminsession,"ils -l", "LIST", "tempZone")
+        assertiCmd(s.adminsession,"iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=10") 
+        
+        # test it
+        assertiCmd(s.adminsession, "iget -f "+filename, "ERROR", "HIERARCHY_ERROR") 
+
+        # verify it
+        p = subprocess.Popen(['grep "WOS_GET_ERR"  ../../iRODS/server/log/rodsLog.* | grep "10 of 10"'], shell=True, stdout=subprocess.PIPE)
+        result = p.communicate()[0]
+        assert( -1 != result.find( "10 of 10" ) )
+       
+        # clean up 
+        assertiCmd(s.adminsession,"iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard") 
+        os.remove(filepath)
+
+
     def test_irm_specific_replica(self):
         assertiCmd(s.adminsession,"ils -L "+self.testfile,"LIST",self.testfile) # should be listed
         assertiCmd(s.adminsession,"irepl -R "+self.testresc+" "+self.testfile) # creates replica

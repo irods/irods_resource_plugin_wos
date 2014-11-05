@@ -96,7 +96,7 @@ const size_t MAX_RETRY_COUNT = 100;
 size_t RETRY_COUNT = 3;
 
 extern "C" {
-static const std::string NUM_RETRIES_KEY( "num_retries" );
+static const std::string NUM_RETRIES_KEY( "retry_count" );
 static const std::string WOS_HOST_KEY( "wos_host" );
 static const std::string WOS_POLICY_KEY( "wos_policy" );
 static const std::string REPL_POLICY_KEY( "repl_policy" );
@@ -427,7 +427,7 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
            msg << "failed to call curl_easy_perform - ";
            msg << res; 
            irods::log( ERROR( 
-                       UNIX_FILE_OPEN_ERR, 
+                       WOS_PUT_ERR, 
                        msg.str() ) );
 
 
@@ -464,99 +464,138 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
 
 static int 
 getTheFile (const char *resource, const char *file, const char *destination, int mode,
-            WOS_HEADERS_P headerP) {
-   CURLcode res;
-   CURL *theCurl;
-   time_t now;
-   struct tm *theTM;
-   FILE  *destFile;
-   int    destFd;
+        WOS_HEADERS_P headerP) {
+    CURLcode res;
+    CURL *theCurl;
+    time_t now;
+    struct tm *theTM;
+    FILE  *destFile;
+    int    destFd;
 
-   // Initialize lib curl
-   theCurl = curl_easy_init();
- 
-   // The extra byte is for the '/'
-   char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
-   char dateHeader[WOS_DATE_LENGTH];
- 
-   // The headers
-   struct curl_slist *headers = NULL;
+    // Initialize lib curl
+    theCurl = curl_easy_init();
 
-   rodsLog(LOG_DEBUG, "getting ready to get the file\n");
-   
-   // construct the url from the resource and the file name
-   sprintf(theURL, "%s/objects/%s", resource, file);
-   rodsLog(LOG_DEBUG, "theURL: %s\n", theURL);
-   curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
+    // The extra byte is for the '/'
+    char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
+    char dateHeader[WOS_DATE_LENGTH];
 
-   // Create the date header
-   now = time(NULL);
-   theTM = gmtime(&now);
-   strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
+    // The headers
+    struct curl_slist *headers = NULL;
 
-   // Set the request header
-   curl_easy_setopt(theCurl, CURLOPT_HTTPGET, 1);
+    rodsLog(LOG_DEBUG, "getting ready to get the file\n");
 
-   // Let's not dump the header or be verbose
-   curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
-   curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
+    // construct the url from the resource and the file name
+    sprintf(theURL, "%s/objects/%s", resource, file);
+    rodsLog(LOG_DEBUG, "theURL: %s\n", theURL);
+    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
-   // Now add some headers
-   headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
-   headers = curl_slist_append(headers, WOS_CONTENT_LENGTH_HEADER);
-   headers = curl_slist_append(headers, dateHeader);
+    // Create the date header
+    now = time(NULL);
+    theTM = gmtime(&now);
+    strftime(dateHeader, WOS_DATE_LENGTH, WOS_DATE_FORMAT_STRING, theTM);
 
-   // Get rid of the accept header
-   headers = curl_slist_append(headers, "Accept:");
-   
-   // Stuff the headers into the request
-   curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+    // Set the request header
+    curl_easy_setopt(theCurl, CURLOPT_HTTPGET, 1);
 
-   // assign the write funcion
-   curl_easy_setopt(theCurl, CURLOPT_WRITEFUNCTION, writeTheData);
+    // Let's not dump the header or be verbose
+    curl_easy_setopt(theCurl, CURLOPT_HEADER, 0);
+    curl_easy_setopt(theCurl, CURLOPT_VERBOSE, 0);
 
-   // assign the result header function and it's user data
-   curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
-   curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
-   
-   // Open the destination file using open so we can use the user mode.
-   // Then convert the file index into a descriptor for use of the curl
-   // library
-   destFd = open(destination, O_WRONLY | O_CREAT | O_TRUNC, mode);
-   if (destFd < 0) {
-      curl_easy_cleanup(theCurl);
-      return(UNIX_FILE_OPEN_ERR - errno);
-   } else {
-      destFile = fdopen(destFd, "wb");
-      if (!destFile) {
-         // Couldn't convert index to descriptor.  Seems unlikely ...
-         curl_easy_cleanup(theCurl);
-         fclose( destFile );
-         return(UNIX_FILE_OPEN_ERR - errno);
-      } else {
-         curl_easy_setopt(theCurl, CURLOPT_FILE, destFile);
-         res = curl_easy_perform(theCurl);
-         if (res) {
-            // an error in lib curl
-            unlink(destination);
+    // Now add some headers
+    headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
+    headers = curl_slist_append(headers, WOS_CONTENT_LENGTH_HEADER);
+    headers = curl_slist_append(headers, dateHeader);
+
+    // Get rid of the accept header
+    headers = curl_slist_append(headers, "Accept:");
+
+    // Stuff the headers into the request
+    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+
+    // assign the write funcion
+    curl_easy_setopt(theCurl, CURLOPT_WRITEFUNCTION, writeTheData);
+
+    // assign the result header function and it's user data
+    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
+    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
+
+    // Open the destination file using open so we can use the user mode.
+    // Then convert the file index into a descriptor for use of the curl
+    // library
+    destFd = open(destination, O_WRONLY | O_CREAT | O_TRUNC, mode);
+    if (destFd < 0) {
+        curl_easy_cleanup(theCurl);
+        return(UNIX_FILE_OPEN_ERR - errno);
+    } else {
+        destFile = fdopen(destFd, "wb");
+        if (!destFile) {
+            // Couldn't convert index to descriptor.  Seems unlikely ...
             curl_easy_cleanup(theCurl);
             fclose( destFile );
-            return(WOS_GET_ERR);
-         }
-      } 
-   }
+            return(UNIX_FILE_OPEN_ERR - errno);
+        } else {
+            curl_easy_setopt(theCurl, CURLOPT_FILE, destFile);
+            bool   get_done_flg = false;
+            size_t retry_cnt    = 0;
 
-   rodsLog(LOG_DEBUG,"In getTheFile: code: %d, string: %s\n", 
-          headerP->x_ddn_status, headerP->x_ddn_status_string);
+            while( !get_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
+                res = curl_easy_perform(theCurl);
+                if (res) {
+                    // an error in lib curl
+                    std::stringstream msg;
+                    msg << "error putting the WOS object \"";
+                    msg << file;
+                    msg << "\" with curl_easy_perform status ";
+                    msg << res;
+                    msg << " (";
+                    msg << retry_cnt+1;
+                    msg << " of ";
+                    msg << RETRY_COUNT;
+                    msg << " retries )";
+                    irods::log( ERROR(
+                                WOS_GET_ERR,
+                                msg.str() ) );
 
-   if (headerP->x_ddn_status == WOS_OBJ_NOT_FOUND) {
-      // The file was not found but because we already opened it
-      // there will now be a zero length file. Let's remove it
-      unlink(destination);
-   }
-   curl_easy_cleanup(theCurl);
-   fclose(destFile);
-   return res;
+                    retry_cnt++;
+
+                } else {
+                    // libcurl return success
+                    get_done_flg = true;
+
+                }
+
+            } // while
+
+            if( !get_done_flg ) {
+                fclose( destFile );
+                unlink(destination);
+                curl_easy_cleanup(theCurl);
+                std::stringstream msg;
+                msg << "failed to call curl_easy_perform - ";
+                msg << res; 
+                irods::log( 
+                    ERROR( 
+                        WOS_GET_ERR, 
+                        msg.str() ) );
+                return(WOS_GET_ERR);
+
+            } // if
+
+        } // else 
+
+    } // else
+
+    rodsLog(LOG_DEBUG,"In getTheFile: code: %d, string: %s\n", 
+            headerP->x_ddn_status, headerP->x_ddn_status_string);
+
+    if (headerP->x_ddn_status == WOS_OBJ_NOT_FOUND) {
+        // The file was not found but because we already opened it
+        // there will now be a zero length file. Let's remove it
+        unlink(destination);
+    }
+    curl_easy_cleanup(theCurl);
+    fclose(destFile);
+    return res;
 }
 
 /** 
@@ -1591,13 +1630,12 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
            if( !_opr  ) {
                result =  ERROR( -1, "wosRedirectPlugin - null operation" );
            } else if( !_curr_host ) {
-               result =  ERROR( -1, "wosRedirectPlugin - null operation" );
+               result =  ERROR( -1, "wosRedirectPlugin - null current host" );
            } else  if( !_out_parser ) {
                result =  ERROR( -1, "wosRedirectPlugin - null outgoing hier parser" );
            } else if( !_out_vote ) {
                result =  ERROR( -1, "wosRedirectPlugin - null outgoing vote" );
            } else {
-           
               // =-=-=-=-=-=-=-
               // cast down the chain to our understood object type
               irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
@@ -1641,7 +1679,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             // =-=-=-=-=-=-=-
             // parse context string into property pairs assuming a ; as a separator
             std::vector< std::string > props;
-            rodsLog( LOG_DEBUG, "context: %s", _context.c_str());
+            rodsLog( LOG_DEBUG, "wos context: %s", _context.c_str());
 
             irods::kvp_map_t kvp;
             irods::parse_kvp_string(
@@ -1710,7 +1748,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
 
         ~wos_resource() {
-             rodsLog( LOG_NOTICE, "calling WOS destructor" );
+             rodsLog( LOG_DEBUG, "calling WOS destructor" );
         }
 
     }; // class wos_resource
