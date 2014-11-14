@@ -95,7 +95,11 @@
 const size_t MAX_RETRY_COUNT = 100;
 size_t RETRY_COUNT = 3;
 
+const size_t MAX_CONNECT_TIMEOUT = 120;
+size_t CONNECT_TIMEOUT = 60;
+
 extern "C" {
+static const std::string CONNECT_TIMEOUT_KEY( "connect_timeout" );
 static const std::string NUM_RETRIES_KEY( "retry_count" );
 static const std::string WOS_HOST_KEY( "wos_host" );
 static const std::string WOS_POLICY_KEY( "wos_policy" );
@@ -345,6 +349,9 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
 
+   // Set connection timeout (seconds)
+   curl_easy_setopt(theCurl, CURLOPT_CONNECTTIMEOUT, (long) CONNECT_TIMEOUT);
+
    // We need the size of the destination file. Let's do a stat command
    if (stat(file, &sourceFileInfo)){
       rodsLog(LOG_ERROR,"stat of source file %s failed with errno %d\n", 
@@ -396,8 +403,6 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
            res = curl_easy_perform(theCurl);
            if( res ) {
                // An error in libcurl
-               // curl_easy_cleanup(theCurl);
-
                std::stringstream msg;
                msg << "error putting the WOS object \"";
                msg << file;
@@ -407,7 +412,9 @@ putTheFile (const char *resource, const char *policy, const char *file, WOS_HEAD
                msg << retry_cnt+1;
                msg << " of ";
                msg << RETRY_COUNT;
-               msg << " retries )";
+               msg << " retries ). Retry in ";
+               msg << (long) CONNECT_TIMEOUT;
+               msg << " seconds.";
                irods::log( ERROR(
                            WOS_PUT_ERR,
                            msg.str() ) );
@@ -519,6 +526,9 @@ getTheFile (const char *resource, const char *file, const char *destination, int
     curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
     curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
 
+    // Set connection timeout (seconds)
+    curl_easy_setopt(theCurl, CURLOPT_CONNECTTIMEOUT, (long) CONNECT_TIMEOUT);
+
     // Open the destination file using open so we can use the user mode.
     // Then convert the file index into a descriptor for use of the curl
     // library
@@ -551,7 +561,9 @@ getTheFile (const char *resource, const char *file, const char *destination, int
                     msg << retry_cnt+1;
                     msg << " of ";
                     msg << RETRY_COUNT;
-                    msg << " retries )";
+                    msg << " retries ). Retry in ";
+                    msg << (long) CONNECT_TIMEOUT;
+                    msg << " seconds.";
                     irods::log( ERROR(
                                 WOS_GET_ERR,
                                 msg.str() ) );
@@ -701,6 +713,8 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    char dateHeader[WOS_DATE_LENGTH];
    char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
    char oidHeader[WOS_FILE_LENGTH];
+   bool put_done_flg = false;
+   size_t retry_cnt    = 0;
 
    // Initialize lib curl
    theCurl = curl_easy_init();
@@ -728,6 +742,9 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    // assign the result header function and it's user data
    curl_easy_setopt(theCurl, CURLOPT_HEADERFUNCTION, readTheHeaders);
    curl_easy_setopt(theCurl, CURLOPT_WRITEHEADER, headerP);
+   
+   // Set connection timeout (seconds)
+   curl_easy_setopt(theCurl, CURLOPT_CONNECTTIMEOUT, (long) CONNECT_TIMEOUT);
 
    // Make the content length header
    sprintf(contentLengthHeader, "%s%d", WOS_CONTENT_LENGTH_PUT_HEADER, 0);
@@ -743,13 +760,47 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    
    // Stuff the headers into the request
    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+   while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
 
-   res = curl_easy_perform(theCurl);
-   if (res) {
-      curl_easy_cleanup(theCurl);
-      return(WOS_UNLINK_ERR);
+      res = curl_easy_perform(theCurl);
+      if (res) {
+         // An error in libcurl
+         std::stringstream msg;
+         msg << "error deleting the WOS object \"";
+         msg << file;
+         msg << "\" with curl_easy_perform status ";
+         msg << res;
+         msg << " (";
+         msg << retry_cnt+1;
+         msg << " of ";
+         msg << RETRY_COUNT;
+         msg << " retries ). Retry in ";
+         msg << (long) CONNECT_TIMEOUT;
+         msg << " seconds.";
+         irods::log( ERROR(
+                     WOS_UNLINK_ERR,
+                     msg.str() ) );
+
+         retry_cnt++;
+
+      } else {
+         // libcurl return success
+         put_done_flg = true;
+
+      }
+
+   } // while
+
+   if( put_done_flg != true ) {
+       curl_easy_cleanup(theCurl);
+       std::stringstream msg;
+       msg << "failed to call curl_easy_perform - ";
+       msg << res;
+       irods::log( ERROR(
+                   WOS_UNLINK_ERR,
+                   msg.str() ) );
+       return (WOS_UNLINK_ERR);
    }
-
 
    rodsLog(LOG_DEBUG, "In deleteTheFile: code: %d, oid: %s\n", 
            headerP->x_ddn_status, headerP->x_ddn_oid);
@@ -1730,6 +1781,30 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
             }
 
+            std::string timeout_str;
+            prop_ret = properties_.get< std::string >( CONNECT_TIMEOUT_KEY, timeout_str );
+            if( prop_ret.ok() ) {
+                size_t timeout_sz = 0;
+                try {
+                    timeout_sz = boost::lexical_cast< size_t >( timeout_str );
+                    if( timeout_sz <= MAX_CONNECT_TIMEOUT ) {
+                        CONNECT_TIMEOUT = timeout_sz;
+                    } else {
+                        rodsLog(
+                            LOG_ERROR,
+                            "wos_resource - connect timeout %ld, exceeded max %ld",
+                            timeout_sz,
+                            MAX_CONNECT_TIMEOUT );
+                    }
+
+                } catch( boost::bad_lexical_cast e ) {
+                        rodsLog(
+                            LOG_ERROR,
+                            "wos_resource - failed to lexical cast [%s] to size_t",
+                            timeout_str.c_str() );
+                }
+
+            }
 
         } // ctor
 
