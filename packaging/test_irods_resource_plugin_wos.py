@@ -58,7 +58,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
 
     def test_retry_for_put(self):
         # set up
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=10")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=2;connect_timeout=5")
         filename = "some_test_file.txt"
         filepath = lib.create_local_testfile(filename)
 
@@ -66,9 +66,9 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand( "iput -f "+filepath, 'STDERR_SINGLELINE', "WOS_PUT_ERR")
 
         # verify it
-        p = subprocess.Popen(['grep "WOS_PUT_ERR"  ../../iRODS/server/log/rodsLog.* | grep "10 of 10"'], shell=True, stdout=subprocess.PIPE)
+        p = subprocess.Popen(['grep "WOS_PUT_ERR"  ../../iRODS/server/log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
         result = p.communicate()[0]
-        assert( -1 != result.find( "10 of 10" ) )
+        assert( -1 != result.find( "2 of 2" ) )
 
         # clean up
         self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard")
@@ -82,15 +82,15 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
         self.admin.assert_icommand("itrim -N1 -n0 "+filename )
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=10")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=2;connect_timeout=5")
 
         # test it
         self.admin.assert_icommand( "iget -f "+filename, 'STDERR_SINGLELINE', "HIERARCHY_ERROR")
 
         # verify it
-        p = subprocess.Popen(['grep "WOS_GET_ERR"  ../../iRODS/server/log/rodsLog.* | grep "10 of 10"'], shell=True, stdout=subprocess.PIPE)
+        p = subprocess.Popen(['grep "WOS_GET_ERR"  ../../iRODS/server/log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
         result = p.communicate()[0]
-        assert -1 != result.find( "10 of 10" )
+        assert -1 != result.find( "2 of 2" )
 
         # clean up
         self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard")

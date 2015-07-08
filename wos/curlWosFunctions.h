@@ -103,6 +103,7 @@ typedef struct WOS_MEMORY_TYPE {
  * by the DDN rest interface. The ones that start with x_ddn are DDN specific.
  */
 typedef struct WOS_HEADERS_TYPE {
+    int  http_status; /**< status of the http transaction */
     int  x_ddn_status; /**< Return code from the rest interface */
     int  content_length; /**< Content length as returned by rest interface */
     long x_ddn_length; /**< The length of the file */

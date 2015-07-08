@@ -2,21 +2,6 @@
 
 
 // =-=-=-=-=-=-=-
-// irods includes
-#include "msParam.hpp"
-#include "reGlobalsExtern.hpp"
-#include "rcConnect.hpp"
-#include "rodsLog.hpp"
-#include "rodsErrorTable.hpp"
-#include "objInfo.hpp"
-#include "getHierarchyForResc.hpp"
-#include "regReplica.hpp"
-
-#ifdef USING_JSON
-#include <json/json.h>
-#endif
-
-// =-=-=-=-=-=-=-
 // includes for the curl implementation
 #include <stdio.h>
 #include <unistd.h>
@@ -31,13 +16,18 @@
 #include <sys/stat.h>
 
 // =-=-=-=-=-=-=-
+// irods includes
+#include "getHierarchyForResc.hpp"
+#include "regReplica.hpp"
+
+
+// =-=-=-=-=-=-=-
 // wos includes
 #include "curlWosFunctions.h"
 
 // =-=-=-=-=-=-=-
 // irods includes
 #include "irods_resource_plugin.hpp"
-#include "irods_resource_backport.hpp"
 #include "irods_file_object.hpp"
 #include "irods_physical_object.hpp"
 #include "irods_collection_object.hpp"
@@ -54,43 +44,11 @@
 #include <sstream>
 #include <vector>
 #include <string>
-
 #include "boost/lexical_cast.hpp"
 
-// =-=-=-=-=-=-=-
-// system includes
-#ifndef _WIN32
-#include <sys/file.h>
-#include <sys/param.h>
+#ifdef USING_JSON
+#include <json/json.h>
 #endif
-#include <errno.h>
-#include <sys/stat.h>
-#include <string.h>
-#ifndef _WIN32
-#include <unistd.h>
-#endif
-#include <sys/types.h>
-#if defined(osx_platform)
-#include <sys/malloc.h>
-#else
-#include <malloc.h>
-#endif
-#include <fcntl.h>
-#ifndef _WIN32
-#include <sys/file.h>
-#include <unistd.h>
-#endif
-#include <dirent.h>
-
-#if defined(solaris_platform)
-#include <sys/statvfs.h>
-#endif
-#if defined(linux_platform)
-#include <sys/vfs.h>
-#endif
-#include <sys/stat.h>
-
-#include <string.h>
 
 const size_t MAX_RETRY_COUNT = 100;
 size_t RETRY_COUNT = 3;
@@ -98,7 +56,6 @@ size_t RETRY_COUNT = 3;
 const size_t MAX_CONNECT_TIMEOUT = 120;
 size_t CONNECT_TIMEOUT = 60;
 
-extern "C" {
 static const std::string CONNECT_TIMEOUT_KEY( "connect_timeout" );
 static const std::string NUM_RETRIES_KEY( "retry_count" );
 static const std::string WOS_HOST_KEY( "wos_host" );
@@ -106,7 +63,7 @@ static const std::string WOS_POLICY_KEY( "wos_policy" );
 static const std::string REPL_POLICY_KEY( "repl_policy" );
 static const std::string REPL_POLICY_REG( "consider_wos_repl" );
 
-
+extern "C" {
 /** 
  * @brief This function parses the headers returned from the libcurl call.
  *
@@ -123,7 +80,8 @@ static const std::string REPL_POLICY_REG( "consider_wos_repl" );
  */
 size_t 
 readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
-   char *theHeader = (char *) calloc(size, nmemb + 1);
+   //char *theHeader = (char *) calloc(size, nmemb + 1);
+   char *theHeader = (char *) calloc(nmemb + 1, size);
    int   x_ddn_status;
    char  x_ddn_status_string[WOS_STATUS_LENGTH];
    long  x_ddn_length;
@@ -136,7 +94,24 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
    // that we don't need or want. Remember that we used calloc 
    // for the space, so the string is properly terminated.
    strncpy(theHeader, (char *) ptr, ((size * nmemb)) - 2);
-   rodsLog(LOG_DEBUG,"%d, %d, %s\n", (int) size, (int) strlen(theHeader), theHeader);
+   rodsLog(
+       LOG_DEBUG,
+       "readTheHeaders :: %d, %d, %s\n", 
+       (int) size, 
+       (int) strlen(theHeader), 
+       theHeader);
+
+   // if HTTP/ appears in the string we need to check the code
+   std::string h_str( theHeader );
+   if( std::string::npos != h_str.find( "HTTP/" ) ) {
+       if( std::string::npos != h_str.find( "50" ) ) {
+           rodsLog( 
+               LOG_DEBUG, 
+               "readTheHeaders - setting an error [%s]",
+               h_str.c_str() );
+           theHeaders->http_status = WOS_INTERNAL_ERROR;
+       }
+   }
 
    // Now lets see if this is a header we care about
    if (!strncasecmp(theHeader, 
@@ -149,7 +124,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
              "%d %s", &x_ddn_status, x_ddn_status_string);
       rodsLog(LOG_DEBUG,"code: %d, string: %s\n", x_ddn_status, x_ddn_status_string);
       theHeaders->x_ddn_status = x_ddn_status;
-      strcpy(theHeaders->x_ddn_status_string, x_ddn_status_string);
+      strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
    } 
 
    if (!strncasecmp(theHeader, 
@@ -175,7 +150,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
              "%ld", &x_ddn_length);
       rodsLog(LOG_DEBUG,"length: %ld \n", x_ddn_length);
       theHeaders->x_ddn_length = x_ddn_length;
-      strcpy(theHeaders->x_ddn_status_string, x_ddn_status_string);
+      strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
    } 
 
    free(theHeader);
@@ -311,7 +286,6 @@ putNonZeroFile(
     char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
 
      
-
     // The headers
     struct curl_slist *headers = NULL;
 
@@ -390,7 +364,7 @@ putNonZeroFile(
 
        while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
             res = curl_easy_perform(theCurl);
-            if( res ) {
+            if( res || headerP->http_status != WOS_OK ) {
                // An error in libcurl
                std::stringstream msg;
                msg << "error putting the WOS object \"";
@@ -437,7 +411,6 @@ putNonZeroFile(
     curl_easy_cleanup(theCurl);
     fclose( sourceFile );
     return (int) res;
-
 }
 
 static int 
@@ -447,6 +420,7 @@ overwriteZeroFile(
     const char*   file, 
     const char*   wos_oid, 
     WOS_HEADERS_P headerP) {
+
     CURLcode res;
     CURL *theCurl;
     time_t now;
@@ -517,7 +491,7 @@ overwriteZeroFile(
     headers = curl_slist_append(headers, oidHeader);
 
     rodsLog(
-        LOG_NOTICE,//LOG_DEBUG,
+        LOG_DEBUG,
         "overwriteZeroFile theURL: [%s] type [%s] len [%s] date [%s] oid [%s]\n", 
         theURL, WOS_CONTENT_TYPE_HEADER, contentLengthHeader, dateHeader, oidHeader );
 
@@ -542,7 +516,7 @@ overwriteZeroFile(
 
        while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
             res = curl_easy_perform(theCurl);
-            if( res ) {
+            if( res || headerP->http_status != WOS_OK ) {
                // An error in libcurl
                std::stringstream msg;
                msg << "error putting the WOS object \"";
@@ -585,13 +559,12 @@ overwriteZeroFile(
 
     }
     rodsLog(
-        LOG_NOTICE,//LOG_DEBUG,
+        LOG_DEBUG,
         "In overwriteZeroFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
     curl_easy_cleanup(theCurl);
     fclose( sourceFile );
-
     return (int) res;
 
 }
@@ -602,6 +575,7 @@ registerZeroFile(
     const char*   policy, 
     const char*   file, 
     WOS_HEADERS_P headerP) {
+
     CURLcode res;
     CURL *theCurl;
     time_t now;
@@ -612,7 +586,6 @@ registerZeroFile(
     char dateHeader[WOS_DATE_LENGTH];
     char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
     char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
-
     // The headers
     struct curl_slist *headers = NULL;
 
@@ -671,7 +644,7 @@ registerZeroFile(
     }
     
     rodsLog(
-        LOG_NOTICE,//LOG_DEBUG,
+        LOG_DEBUG,
         "In registerZeroFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
@@ -702,6 +675,8 @@ static int putTheFile(
     WOS_HEADERS_P headerP) {
 
     WOS_HEADERS theHeaders;
+    memset( &theHeaders, 0, sizeof( theHeaders ) );
+
     std::string wos_oid;
     bool file_on_wos = false;
 
@@ -778,16 +753,18 @@ static int putTheFile(
  * @return res.  The return code from curl_easy_perform.
  */
 
-static int 
-getTheFile (const char *resource, const char *file, const char *destination, int mode,
-        WOS_HEADERS_P headerP) {
+static int getTheFile(
+    const char *resource, 
+    const char *file, 
+    const char *destination, 
+    int mode,
+    WOS_HEADERS_P headerP) {
     CURLcode res;
     CURL *theCurl;
     time_t now;
     struct tm *theTM;
     FILE  *destFile;
     int    destFd;
-
     // Initialize lib curl
     theCurl = curl_easy_init();
 
@@ -802,7 +779,9 @@ getTheFile (const char *resource, const char *file, const char *destination, int
 
     // construct the url from the resource and the file name
     sprintf(theURL, "%s/objects/%s", resource, file);
-    rodsLog(LOG_DEBUG, "theURL: %s\n", theURL);
+    rodsLog(
+        LOG_DEBUG, 
+        "theURL: %s\n", theURL);
     curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
     // Create the date header
@@ -859,10 +838,10 @@ getTheFile (const char *resource, const char *file, const char *destination, int
 
             while( !get_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
                 res = curl_easy_perform(theCurl);
-                if (res) {
+                if ( res || headerP->http_status != WOS_OK ) {
                     // an error in lib curl
                     std::stringstream msg;
-                    msg << "error putting the WOS object \"";
+                    msg << "error getting the WOS object \"";
                     msg << file;
                     msg << "\" with curl_easy_perform status ";
                     msg << res;
@@ -906,8 +885,11 @@ getTheFile (const char *resource, const char *file, const char *destination, int
 
     } // else
 
-    rodsLog(LOG_DEBUG,"In getTheFile: code: %d, string: %s\n", 
-            headerP->x_ddn_status, headerP->x_ddn_status_string);
+    rodsLog(
+        LOG_DEBUG,
+        "In getTheFile: code: %d, string: %s\n", 
+        headerP->x_ddn_status, 
+        headerP->x_ddn_status_string);
 
     if (headerP->x_ddn_status == WOS_OBJ_NOT_FOUND) {
         // The file was not found but because we already opened it
@@ -917,6 +899,7 @@ getTheFile (const char *resource, const char *file, const char *destination, int
     curl_easy_cleanup(theCurl);
     fclose(destFile);
     return res;
+
 }
 
 /** 
@@ -935,6 +918,7 @@ getTheFile (const char *resource, const char *file, const char *destination, int
 
 static int 
 getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP) {
+
    CURLcode res;
    CURL *theCurl;
    time_t now;
@@ -989,15 +973,15 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
    }
 
    rodsLog(
-       LOG_NOTICE,//LOG_DEBUG, 
+       LOG_DEBUG, 
        "In getTheFileStatus: code: %d, string: %s length: %ld\n", 
        headerP->x_ddn_status, 
        headerP->x_ddn_status_string, 
        headerP->x_ddn_length);
 
    curl_easy_cleanup(theCurl);
-
    return (int) res;
+
 }
 
 
@@ -1017,6 +1001,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
 static 
 int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP) {
    rodsLog(LOG_DEBUG,"getting ready to delete the file\n");
+
    CURLcode res;
    CURL *theCurl;
    time_t now;
@@ -1027,7 +1012,6 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    char oidHeader[WOS_FILE_LENGTH];
    bool put_done_flg = false;
    size_t retry_cnt    = 0;
-
    // Initialize lib curl
    theCurl = curl_easy_init();
  
@@ -1075,7 +1059,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
 
       res = curl_easy_perform(theCurl);
-      if (res) {
+      if ( res || headerP->http_status != WOS_OK ) {
          // An error in libcurl
          std::stringstream msg;
          msg << "error deleting the WOS object \"";
@@ -1118,6 +1102,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
            headerP->x_ddn_status, headerP->x_ddn_oid);
    curl_easy_cleanup(theCurl);
    return (int) res;
+
 }
 
 #ifdef USING_JSON
@@ -1227,11 +1212,11 @@ getTheManagementData(
     const char *user,  
     const char *password,
     WOS_STATISTICS_P statsP) {
+
     CURLcode   res;
     CURL *theCurl;
     WOS_MEMORY theData;
     char       auth[(WOS_AUTH_LENGTH * 2) + 1];
-
     // Initialize lib curl
     theCurl = curl_easy_init();
 
@@ -1277,7 +1262,6 @@ getTheManagementData(
     return 0;
 }
 #endif
-
 
 // =-=-=-=-=-=-=-
 /// @brief Checks the basic operation parameters and updates the physical path in the file object
@@ -1362,6 +1346,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         int status;
         const char *wos_host;
         WOS_HEADERS theHeaders;
+        memset( &theHeaders, 0, sizeof( theHeaders ) );
+
         irods::error prop_ret;
         std::string my_host;
         irods::error result = SUCCESS();
@@ -1404,6 +1390,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         const char *wos_host;
         const char *wosPolicy;
         WOS_HEADERS theHeaders;
+        memset( &theHeaders, 0, sizeof( theHeaders ) );
         irods::error prop_ret;
         std::string my_host;
         irods::error result = SUCCESS();
@@ -1423,7 +1410,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
               irods::data_object_ptr object = boost::dynamic_pointer_cast< irods::data_object >( _ctx.fco() );
 
              rodsLog( 
-                 LOG_NOTICE,//LOG_DEBUG
+                 LOG_DEBUG,
                  "wosFileStatPlugin :: [%s]",
                  object->physical_path().c_str() );
 
@@ -1601,11 +1588,13 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         struct stat fileStatus;
         const char *wos_host;
         const char *wos_policy;
-        WOS_HEADERS theHeaders;
         irods::error prop_ret;
         std::string my_host;
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
+        
+        WOS_HEADERS theHeaders;
+        memset( &theHeaders, 0, sizeof( theHeaders ) );
 
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
@@ -1660,8 +1649,12 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         struct stat fileStatus;
         const char *wos_host;
         const char *wos_policy;
+
         WOS_HEADERS theHeaders;
+        memset( &theHeaders, 0, sizeof( theHeaders ) );
         WOS_HEADERS deleteHeaders;
+        memset( &deleteHeaders, 0, sizeof( deleteHeaders ) );
+
         irods::error prop_ret;
         std::string my_host;
         std::string my_policy;
@@ -1811,6 +1804,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         // =-=-=-=-=-=-=-
         // perform a stat on the obj id to see if it is there
         WOS_HEADERS wos_headers;
+        memset( &wos_headers, 0, sizeof( wos_headers ) );
         int status = getTheFileStatus( wos_host.c_str(), obj_id.c_str(), &wos_headers );
         if ( status ) {
             return ERROR( status, "error in getTheFileStatus");
@@ -2049,7 +2043,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             // parse context string into property pairs assuming a ; as a separator
             std::vector< std::string > props;
             rodsLog( LOG_DEBUG, "wos context: %s", _context.c_str());
-
             irods::kvp_map_t kvp;
             irods::parse_kvp_string(
                 _context,
@@ -2071,7 +2064,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             irods::error prop_ret = properties_.get< std::string >( WOS_HOST_KEY, my_host );
             if (!prop_ret.ok()) {
                 std::stringstream msg;
-                rodsLog( LOG_NOTICE, "prop_map has no wos_host " );
+                rodsLog( LOG_ERROR, "prop_map has no wos_host " );
             }
 
             std::string retry_str; 
@@ -2146,9 +2139,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     }; // class wos_resource
 
-    int some_other_fcn(
-        irods::resource_plugin_context&  _ctx ) {}
-
     // =-=-=-=-=-=-=-
     // Create the plugin factory function which will return a microservice
     // table entry containing the microservice function pointer, the number
@@ -2157,8 +2147,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // to create the entry to the table when the plugin is requested.
     irods::resource* plugin_factory(const std::string& _inst_name, const std::string& _context) {
         wos_resource* resc = new wos_resource( _inst_name, _context );
-        resc->add_operation( "some_other_fcn", "some_other_fcn" );
-
         resc->add_operation( irods::RESOURCE_OP_CREATE,       "wosFileCreatePlugin" );
         resc->add_operation( irods::RESOURCE_OP_OPEN,         "wosFileOpenPlugin" );
         resc->add_operation( irods::RESOURCE_OP_READ,         "wosFileReadPlugin" );
@@ -2191,7 +2179,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         return dynamic_cast<irods::resource *>( resc );
 
     } // plugin_factory
-
 
 }; // extern "C" 
 
