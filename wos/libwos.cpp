@@ -64,6 +64,15 @@ static const std::string REPL_POLICY_KEY( "repl_policy" );
 static const std::string REPL_POLICY_REG( "consider_wos_repl" );
 
 extern "C" {
+    // locally define the interface version function in order to
+    // no longer need to link against the irods client interface
+    double get_plugin_interface_version() {
+        static const double PLUGIN_INTERFACE_VERSION = 1.0;
+        return PLUGIN_INTERFACE_VERSION;
+    }
+
+
+
 /** 
  * @brief This function parses the headers returned from the libcurl call.
  *

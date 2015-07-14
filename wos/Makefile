@@ -1,17 +1,12 @@
 
 
-BOOST_LIBS = /usr/lib/irods/externals/libboost_system.a \
-             /usr/lib/irods/externals/libboost_filesystem.a \
-             /usr/lib/irods/externals/libboost_regex.a \
-             /usr/lib/irods/externals/libboost_thread.a
-
 TARGET = libwos.so
 
 SRCS = libwos.cpp
 
 HEADERS = curlWosFunctions.h
 
-EXTRALIBS = -L/usr/lib64 -lcurl /usr/lib/libirods_client.a
+EXTRALIBS = -L/usr/lib64 -lcurl
 
 EXTRAINCS = 
 
