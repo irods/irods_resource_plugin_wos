@@ -16,3 +16,32 @@ To use this resource plugin:
 
   irods@hostname $ iadmin mkresc archiveResc wos <hostname>:/fakeVaultPath "wos_host=<WOSEndpoint>;wos_policy=<PolicyName>"
 
+
+Leveraging WOS replication with iRODS:
+
+The DDN WOS appliance has the ability to create policies which allow for the repilcation of data objects between appliances.
+When this feature is used iRODS will not be aware of an exisiting replica which may be locally resident.  In order for iRODS
+be made aware of the possiblity of these repilcas, an additional configuration parameter has been added to the WOS resource plugin.
+This option will instruct the plugin to stat a given OID, and should it exist locally, register that OID as a new replica within iRODS.
+
+In order for this feature to be immediately useful the Compound resource need to have its policy set to "prefer archive" and all WOS
+appliances in the Zone must be grouped under a Deferred node.
+
+Configuration:
+
+1. Set the cache refresh policy for compound resources by uncommenting this line in /etc/irods/core.re
+   pep_resource_resolve_hierarchy_pre(*OUT){*OUT="compound_resource_cache_refresh_policy=always";}
+   
+2. Enable the check for replicas within the wos plugin by adding "repl_policy=on" to the WOS context string
+
+3. Every compound resource servicing a WOS node in the WOS cluster must be grouped under a Deferred node. This allows for the locally
+   resident WOS replica to win the vote for hierarchy resolution given that a Deferred node simply picks the highest vote.
+
+
+
+
+
+
+
+
+
