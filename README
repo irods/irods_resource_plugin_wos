@@ -19,9 +19,9 @@ To use this resource plugin:
 
 Leveraging WOS replication with iRODS:
 
-The DDN WOS appliance has the ability to create policies which allow for the repilcation of data objects between appliances.
+The DDN WOS appliance has the ability to create policies which allow for the replication of data objects between appliances.
 When this feature is used iRODS will not be aware of an exisiting replica which may be locally resident.  In order for iRODS
-be made aware of the possiblity of these repilcas, an additional configuration parameter has been added to the WOS resource plugin.
+be made aware of the possiblity of these replicas, an additional configuration parameter has been added to the WOS resource plugin.
 This option will instruct the plugin to stat a given OID, and should it exist locally, register that OID as a new replica within iRODS.
 
 In order for this feature to be immediately useful the Compound resource need to have its policy set to "prefer archive" and all WOS
