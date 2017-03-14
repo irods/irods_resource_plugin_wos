@@ -1601,7 +1601,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         std::string my_host;
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
-        
+
+ 
         WOS_HEADERS theHeaders;
         memset( &theHeaders, 0, sizeof( theHeaders ) );
 
@@ -1614,8 +1615,34 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) { 
               wos_host = my_host.c_str();
       
-              irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
-              
+                irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
+ 
+		// =-=-=-=-=-=-=-
+		// find the replica which is at rest on the WOS system and get its size
+		std::string resc_name;
+		irods::error ret = _ctx.prop_map().get< std::string >( irods::RESOURCE_NAME, resc_name );
+		if( !ret.ok() ) {
+		    return PASS( ret );
+		}
+
+		bool repl_found = false;
+		uintmax_t file_size;
+		std::vector< irods::physical_object > replicas = file_obj->replicas();
+		for(size_t i = 0; i < replicas.size(); ++i) {
+		    irods::hierarchy_parser p;
+		    p.set_string(replicas[i].resc_hier());
+		    if(p.resc_in_hier(resc_name)) {
+			repl_found = true;
+			file_size = replicas[i].size();
+		    }
+		}
+
+		if(!repl_found) {
+		    return ERROR(
+			       INVALID_OBJECT_NAME,
+			       "object not found on the archive" );
+		}
+             
               // The old code allows user to set a mode.  We should now be doing this.
               status = getTheFile(wos_host, 
                                   file_obj->physical_path().c_str(), 
