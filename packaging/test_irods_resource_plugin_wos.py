@@ -4,6 +4,7 @@ import re
 import shutil
 import socket
 import subprocess
+import imp
 
 import sys
 if sys.version_info >= (2,7):
@@ -15,6 +16,13 @@ import lib
 import resource_suite
 from test_chunkydevtest import ChunkyDevTest
 
+pydevtestdir = os.path.dirname(os.path.realpath(__file__))
+topdir = os.path.dirname(os.path.dirname(pydevtestdir))
+packagingdir = os.path.join(topdir, 'packaging')
+module_tuple = imp.find_module('server_config', [packagingdir])
+imp.load_module('server_config', *module_tuple)
+
+from server_config import ServerConfig
 
 class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTest, unittest.TestCase):
     def setUp(self):
@@ -39,6 +47,24 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
             admin_session.assert_icommand("iadmin modresc origResc name demoResc", 'STDOUT_SINGLELINE', 'rename', stdin_string='yes\n')
         shutil.rmtree(lib.get_irods_top_level_dir() + "/archiveRescVault", ignore_errors=True)
         shutil.rmtree(lib.get_irods_top_level_dir() + "/cacheRescVault", ignore_errors=True)
+
+    def test_itrim__issue_1575(self):
+        filename = "some_test_file_1575.txt"
+        filepath = lib.create_local_testfile(filename)
+
+        self.admin.assert_icommand("iput "+filename)
+        self.admin.assert_icommand("ils -L "+filename, 'STDOUT_SINGLELINE', filename)
+
+        session_path = lib.get_vault_session_path(self.admin,'cacheResc')
+        cache_phy_path = os.path.join(lib.get_vault_session_path(self.admin,'cacheResc'), filename)
+        lib.assert_command("rm "+cache_phy_path)
+        lib.assert_command("touch "+cache_phy_path)
+
+        # zero out the file size in the catalog
+        cfg = ServerConfig()
+        cfg.exec_sql_cmd('update r_data_main set data_size = 0 where data_repl_num = 0 and data_name = "%s"' % filename)
+
+        self.admin.assert_icommand('itrim -N1 -n0 '+filename )
 
     def test_empty_files(self):
         # set up
