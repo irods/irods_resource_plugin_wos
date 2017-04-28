@@ -1674,6 +1674,35 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         return result;
     } // wosStageToCachePlugin
 
+    irods::error unlink_for_overwrite(
+        const char*            _wos_host,
+        irods::plugin_context& _ctx) {
+        irods::file_object_ptr fobj = boost::dynamic_pointer_cast<
+            irods::file_object>(
+                    _ctx.fco());
+        std::string resc_name;
+        irods::error ret = _ctx.prop_map().get<std::string>(
+                irods::RESOURCE_NAME,
+                resc_name );
+        if( !ret.ok() ) {
+            return PASS( ret );
+        }
+
+        irods::hierarchy_parser hp;
+        hp.set_string(fobj->resc_hier());
+        if(hp.resc_in_hier(resc_name)) {
+            WOS_HEADERS theHeaders;
+            memset( &theHeaders, 0, sizeof( theHeaders ) );
+            deleteTheFile(
+                    _wos_host,
+                    fobj->physical_path().c_str(),
+                    &theHeaders);
+        }
+
+        return SUCCESS();
+
+    } // unlink_for_overwrite
+
     // =-=-=-=-=-=-=-
     // wosSyncToArch - This routine is for testing the TEST_STAGE_FILE_TYPE.
     // Just copy the file from cacheFilename to filename. optionalInfo info
@@ -1705,8 +1734,12 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
               wos_host = my_host.c_str();
+              irods::error err = unlink_for_overwrite(wos_host, _ctx);
+              if(!err.ok()) {
+                  irods::log(err);
+              }
+
               prop_ret = prop_map.get< std::string >( WOS_POLICY_KEY, my_policy );
-      
               if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
                  wos_policy = my_policy.c_str();
                  irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
