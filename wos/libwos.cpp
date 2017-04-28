@@ -17,8 +17,7 @@
 
 // =-=-=-=-=-=-=-
 // irods includes
-#include "getHierarchyForResc.hpp"
-#include "regReplica.hpp"
+#include "rsRegReplica.hpp"
 
 
 // =-=-=-=-=-=-=-
@@ -63,13 +62,12 @@ static const std::string WOS_POLICY_KEY( "wos_policy" );
 static const std::string REPL_POLICY_KEY( "repl_policy" );
 static const std::string REPL_POLICY_REG( "consider_wos_repl" );
 
-extern "C" {
-    // locally define the interface version function in order to
-    // no longer need to link against the irods client interface
-    double get_plugin_interface_version() {
-        static const double PLUGIN_INTERFACE_VERSION = 1.0;
-        return PLUGIN_INTERFACE_VERSION;
-    }
+// locally define the interface version function in order to
+// no longer need to link against the irods client interface
+double get_plugin_interface_version() {
+static const double PLUGIN_INTERFACE_VERSION = 1.0;
+    return PLUGIN_INTERFACE_VERSION;
+}
 
 
 
@@ -177,6 +175,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
  * work correctly would require enhancing the iRODS resource code to store
  * and provide an admin user, password and url.
  */
+#if 0
 /** 
  * @brief This function writes the data received from the DDN unit to a 
  *        memory buffer. It's used by the status operation.
@@ -223,7 +222,7 @@ writeTheDataToMemory(void *ptr, size_t size, size_t nmemb, void *stream) {
    
     return totalSize;
 }
-
+#endif
 
 /** 
  * @brief This function writes the data received from the DDN unit to disk.
@@ -294,7 +293,6 @@ putNonZeroFile(
     char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
     char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
 
-     
     // The headers
     struct curl_slist *headers = NULL;
 
@@ -589,12 +587,11 @@ registerZeroFile(
     CURL *theCurl;
     time_t now;
     struct tm *theTM;
-    struct stat sourceFileInfo;
-    FILE  *sourceFile;
+    
     char theURL[WOS_RESOURCE_LENGTH + WOS_POLICY_LENGTH + 1];
     char dateHeader[WOS_DATE_LENGTH];
-    char contentLengthHeader[WOS_CONTENT_HEADER_LENGTH];
     char policyHeader[strlen(WOS_POLICY_HEADER) + WOS_POLICY_LENGTH];
+    
     // The headers
     struct curl_slist *headers = NULL;
 
@@ -648,7 +645,6 @@ registerZeroFile(
                     UNIX_FILE_OPEN_ERR, 
                     msg.str() ) );
 
-        fclose( sourceFile );
         return (WOS_PUT_ERR);
     }
     
@@ -704,6 +700,7 @@ static int putTheFile(
     // the size.  a size of 0 requires a different WOS call.
     int status = 1;
     std::string prev_oid_str( prev_oid );
+
     // only query if we have a valid oid ( no path separators )
     if (std::string::npos == prev_oid_str.find( "/" ) ) {
         status = getTheFileStatus( 
@@ -983,7 +980,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
 
    rodsLog(
        LOG_DEBUG, 
-       "In getTheFileStatus: code: %d, string: %s length: %ld\n", 
+       "In getTheFileStatus: code: %d, string: [%s] length: %ld\n", 
        headerP->x_ddn_status, 
        headerP->x_ddn_status_string, 
        headerP->x_ddn_length);
@@ -1274,7 +1271,7 @@ getTheManagementData(
 
 // =-=-=-=-=-=-=-
 /// @brief Checks the basic operation parameters and updates the physical path in the file object
-irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
+irods::error wosCheckParams(irods::plugin_context& _ctx ) {
 
     irods::error ret;
 
@@ -1289,42 +1286,42 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     
     // =-=-=-=-=-=-=-
     // interface for file registration
-    irods::error wosRegisteredPlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosRegisteredPlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosRegisteredPlugin" );
     } // wosRegisteredPlugin
 
     // =-=-=-=-=-=-=-
     // interface for file unregistration
-    irods::error wosUnregisteredPlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosUnregisteredPlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosUnregisteredPlugin" );
     } // wosUnregisteredPlugin
 
     // =-=-=-=-=-=-=-
     // interface for file modification
-    irods::error wosModifiedPlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosModifiedPlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosModifiedPlugin" );
     } // wosModifiedPlugin
     
     // =-=-=-=-=-=-=-
     // interface for POSIX create
-    irods::error wosFileCreatePlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosFileCreatePlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileCreatePlugin" );
     } // wosFileCreatePlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Open
-    irods::error wosFileOpenPlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosFileOpenPlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileOpenPlugin" );
     } // wosFileOpenPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Read
-    irods::error wosFileReadPlugin( irods::resource_plugin_context& _ctx,
+    irods::error wosFileReadPlugin( irods::plugin_context& _ctx,
                                       void*               _buf, 
                                       int                 _len ) {
                                       
@@ -1334,7 +1331,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Write
-    irods::error wosFileWritePlugin( irods::resource_plugin_context& _ctx,
+    irods::error wosFileWritePlugin( irods::plugin_context& _ctx,
                                        void*               _buf, 
                                        int                 _len ) {
         return ERROR( SYS_NOT_SUPPORTED, "wosFileWritePlugin" );
@@ -1343,7 +1340,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Close
-    irods::error wosFileClosePlugin(  irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileClosePlugin(  irods::plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileClosePlugin" );
         
@@ -1351,7 +1348,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX Unlink
-    irods::error wosFileUnlinkPlugin( irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileUnlinkPlugin( irods::plugin_context& _ctx ) {
         int status;
         const char *wos_host;
         WOS_HEADERS theHeaders;
@@ -1392,12 +1389,11 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // =-=-=-=-=-=-=-
     // interface for POSIX Stat
     irods::error wosFileStatPlugin(
-        irods::resource_plugin_context& _ctx,
-        struct stat*                    _statbuf ) { 
+        irods::plugin_context& _ctx,
+        struct stat*           _statbuf ) { 
         rodsLong_t len;
         int status = 0;
         const char *wos_host;
-        const char *wosPolicy;
         WOS_HEADERS theHeaders;
         memset( &theHeaders, 0, sizeof( theHeaders ) );
         irods::error prop_ret;
@@ -1451,16 +1447,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     } // wosFileStatPlugin
 
     // =-=-=-=-=-=-=-
-    // interface for POSIX Fstat
-    irods::error wosFileFstatPlugin(  irods::resource_plugin_context& _ctx,
-                                       struct stat*        _statbuf ) {
-        return ERROR( SYS_NOT_SUPPORTED, "wosFileFstatPlugin" );
-                                   
-    } // wosFileFstatPlugin
-
-    // =-=-=-=-=-=-=-
     // interface for POSIX lseek
-    irods::error wosFileLseekPlugin(  irods::resource_plugin_context& _ctx, 
+    irods::error wosFileLseekPlugin(  irods::plugin_context& _ctx, 
                                        size_t              _offset, 
                                        int                 _whence ) {
 
@@ -1470,7 +1458,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX fsync
-    irods::error wosFileFsyncPlugin(  irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileFsyncPlugin(  irods::plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileFsyncPlugin" );
 
@@ -1478,7 +1466,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    irods::error wosFileMkdirPlugin(  irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileMkdirPlugin(  irods::plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileMkdirPlugin" );
 
@@ -1486,28 +1474,28 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX mkdir
-    irods::error wosFileRmdirPlugin(  irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileRmdirPlugin(  irods::plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileRmdirPlugin" );
     } // wosFileRmdirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX opendir
-    irods::error wosFileOpendirPlugin( irods::resource_plugin_context& _ctx ) {
+    irods::error wosFileOpendirPlugin( irods::plugin_context& _ctx ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileOpendirPlugin" );
     } // wosFileOpendirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX closedir
-    irods::error wosFileClosedirPlugin( irods::resource_plugin_context& _ctx) {
+    irods::error wosFileClosedirPlugin( irods::plugin_context& _ctx) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileClosedirPlugin" );
     } // wosFileClosedirPlugin
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    irods::error wosFileReaddirPlugin( irods::resource_plugin_context& _ctx,
+    irods::error wosFileReaddirPlugin( irods::plugin_context& _ctx,
                                         struct rodsDirent**     _dirent_ptr ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileReaddirPlugin" );
@@ -1515,7 +1503,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 
     // =-=-=-=-=-=-=-
     // interface for POSIX readdir
-    irods::error wosFileRenamePlugin( irods::resource_plugin_context& _ctx,
+    irods::error wosFileRenamePlugin( irods::plugin_context& _ctx,
                                        const char*         _new_file_name ) {
 
         return ERROR( SYS_NOT_SUPPORTED, "wosFileRenamePlugin" );
@@ -1524,7 +1512,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     
     // interface to determine free space on a device given a path
     irods::error wosFileGetFsFreeSpacePlugin(
-        irods::resource_plugin_context& _ctx ){
+        irods::plugin_context& _ctx ){
 
         irods::error prop_ret;
         std::string my_admin;
@@ -1537,48 +1525,46 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         WOS_STATISTICS theStats;
         rodsLong_t spaceInBytes;
         irods::error result = SUCCESS();
-       
+
         // =-=-=-=-=-=-=-
         // check incoming parameters
-        do {
-           irods::error ret = wosCheckParams( _ctx );
-           if(!(result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
-              continue;
-           } 
+        irods::error ret = wosCheckParams( _ctx );
+        if(!(result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
+            return result;
+        } 
 
-           irods::plugin_property_map& prop_map = _ctx.prop_map();
-           prop_ret = prop_map.get< std::string >( "wos_admin_URL", my_admin );
-           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_url")).ok()) {
-              continue;
-           }
-           wos_admin = my_admin.c_str();
-   
-           prop_ret = prop_map.get< std::string >( "wos_admin_user", my_user );
-           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_user")).ok()) {
-               continue;
-           }
-           wos_user = my_user.c_str();
-   
-           prop_ret = prop_map.get< std::string >( "wos_admin_password", my_password );
-           if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_password")).ok()) {
-               continue;
-           }
-           wos_password = my_password.c_str();
-   
-           status = getTheManagementData(wos_admin, wos_user, wos_password, &theStats);
-   
-           // returns non-zero on error.
-           if (status) {
-              result =  ERROR( status, 
-                 "wosFileGetFsFreeSpacePlugin - error in getTheManagementData");
-              continue;
-           }
-   
-           // Units are in Gb 
-           spaceInBytes = theStats.usableCapacity - theStats.capacityUsed;
-           spaceInBytes *= 1073741824;
-           result.code(spaceInBytes);
-        } while (NULL);
+        irods::plugin_property_map& prop_map = _ctx.prop_map();
+        prop_ret = prop_map.get< std::string >( "wos_admin_URL", my_admin );
+        if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_url")).ok()) {
+            return result;
+        }
+        wos_admin = my_admin.c_str();
+
+        prop_ret = prop_map.get< std::string >( "wos_admin_user", my_user );
+        if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_user")).ok()) {
+            return result;
+        }
+        wos_user = my_user.c_str();
+
+        prop_ret = prop_map.get< std::string >( "wos_admin_password", my_password );
+        if(!(result = ASSERT_PASS(prop_ret, " - prop_map has no wos_admin_password")).ok()) {
+            return result;
+        }
+        wos_password = my_password.c_str();
+
+        status = getTheManagementData(wos_admin, wos_user, wos_password, &theStats);
+
+        // returns non-zero on error.
+        if (status) {
+            result =  ERROR( status, 
+                    "wosFileGetFsFreeSpacePlugin - error in getTheManagementData");
+            return result;
+        }
+
+        // Units are in Gb 
+        spaceInBytes = theStats.usableCapacity - theStats.capacityUsed;
+        spaceInBytes *= 1073741824;
+        result.code(spaceInBytes);
 
         return result;
 
@@ -1590,87 +1576,43 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // Just copy the file from filename to cacheFilename. optionalInfo info
     // is not used.
     irods::error wosStageToCachePlugin(
-        irods::resource_plugin_context& _ctx,
-        char*                           _cache_file_name ) {
-
+            irods::plugin_context& _ctx,
+            const char*            _cache_file_name ) {
         int status;
-        struct stat fileStatus;
-        const char *wos_host;
-        const char *wos_policy;
+
+        const char *wos_host = nullptr;
+
         irods::error prop_ret;
         std::string my_host;
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
 
- 
+
         WOS_HEADERS theHeaders;
         memset( &theHeaders, 0, sizeof( theHeaders ) );
 
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
-           irods::plugin_property_map&  prop_map = _ctx.prop_map();
+            irods::plugin_property_map&  prop_map = _ctx.prop_map();
 
-           prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
-           if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) { 
-              wos_host = my_host.c_str();
-      
+            prop_ret = prop_map.get< std::string >( WOS_HOST_KEY, my_host );
+            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) { 
+                wos_host = my_host.c_str();
+
                 irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
- 
-		// =-=-=-=-=-=-=-
-		// find the replica which is at rest on the WOS system and get its size
-		std::string resc_name;
-		irods::error ret = _ctx.prop_map().get< std::string >( irods::RESOURCE_NAME, resc_name );
-		if( !ret.ok() ) {
-		    return PASS( ret );
-		}
-
-		bool repl_found = false;
-		uintmax_t file_size;
-		std::vector< irods::physical_object > replicas = file_obj->replicas();
-		for(size_t i = 0; i < replicas.size(); ++i) {
-		    irods::hierarchy_parser p;
-		    p.set_string(replicas[i].resc_hier());
-		    if(p.resc_in_hier(resc_name)) {
-			repl_found = true;
-			file_size = replicas[i].size();
-		    }
-		}
-
-		if(!repl_found) {
-		    return ERROR(
-			       INVALID_OBJECT_NAME,
-			       "object not found on the archive" );
-		}
-             
-              // The old code allows user to set a mode.  We should now be doing this.
-              status = getTheFile(wos_host, 
-                                  file_obj->physical_path().c_str(), 
-                                  _cache_file_name, 
-                                  file_obj->mode(), 
-                                  &theHeaders);
-
-              // returns non-zero on error.
-              if (!status) {
-                 // Now, lets check to make sure we have the right file length.
-                 if (!stat(_cache_file_name, &fileStatus)){
-                    // we are able to stat the file
-                    if (fileStatus.st_size != file_obj->size()) {
-                        // File is the wrong size
-                        out_stream << "wosStageToCachePlugin length mismatch: expected: " 
-                                   << file_obj->size() << " got " << fileStatus.st_size;
-                        result =  ERROR( SYS_COPY_LEN_ERR, out_stream.str() );
-                    }
-                 } else {
-                     // stat of file failed
-                     result = ERROR( UNIX_FILE_STAT_ERR - errno, "stat of the cache file failed");
-                 }
-              } else {
-                 // get the file failed
-                 result =  ERROR( status, "wosStageToCachePlugin - error in getTheFile");
-              } // non-zero status
-           }
+                // The old code allows user to set a mode.  We should now be doing this.
+                status = getTheFile(wos_host, 
+                        file_obj->physical_path().c_str(), 
+                        _cache_file_name, 
+                        file_obj->mode(), 
+                        &theHeaders);
+                if(status) {
+                    result =  ERROR( status, "wosStageToCachePlugin - error in getTheFile");
+                }
+            }
         }
+
         return result;
     } // wosStageToCachePlugin
 
@@ -1679,12 +1621,11 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // Just copy the file from cacheFilename to filename. optionalInfo info
     // is not used.
     irods::error wosSyncToArchPlugin( 
-        irods::resource_plugin_context& _ctx,
-        char*                           _cache_file_name ) {
+        irods::plugin_context& _ctx,
+        const char*            _cache_file_name ) {
         int status;
-        struct stat fileStatus;
-        const char *wos_host;
-        const char *wos_policy;
+        const char *wos_host = nullptr;
+        const char *wos_policy = nullptr;
 
         WOS_HEADERS theHeaders;
         memset( &theHeaders, 0, sizeof( theHeaders ) );
@@ -1783,7 +1724,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     ///        the WOS system as it may be replicated under the covers.  we then
     ///        regsiter the archive version as a proper replica
     irods::error register_archive_object(
-        irods::resource_plugin_context&  _ctx,
+        irods::plugin_context&  _ctx,
         irods::file_object_ptr           _file_obj ) {
         // =-=-=-=-=-=-=-
         // get the name of this resource
@@ -1813,6 +1754,10 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         if( !ret.ok() ) {
             return ERROR( INVALID_OBJECT_NAME, "object not found on the archive" );
         }
+
+        // =-=-=-=-=-=-=-
+        // check the repl policy
+        // TODO
 
         // =-=-=-=-=-=-=-
         // search for a phypath with NO separator, this should be the object id
@@ -1846,28 +1791,26 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             return ERROR( status, "error in getTheFileStatus");
 
         } 
-        
+
         // =-=-=-=-=-=-=-
         // get our parent resource
-        getHierarchyForRescOut_t* get_hier_out = 0;
-        getHierarchyForRescInp_t  get_hier_inp;
-        strncpy( 
-            get_hier_inp.resc_name_, 
-            resc_name.c_str(),
-            MAX_NAME_LEN );
-        status = rsGetHierarchyForResc(
-                     _ctx.comm(),
-                     &get_hier_inp,
-                     &get_hier_out ); 
-        if( status < 0 ) {
-            return ERROR( status, "failed to get resc hier" );
+        rodsLong_t resc_id = 0;
+        ret = _ctx.prop_map().get<rodsLong_t>( irods::RESOURCE_ID, resc_id );
+        if( !ret.ok() ) {
+            return PASS( ret );
+        }
+
+        std::string resc_hier;
+        ret = resc_mgr.leaf_id_to_hier(resc_id, resc_hier);
+        if( !ret.ok() ) {
+            return PASS( ret );
         }
 
         // =-=-=-=-=-=-=-
         // get the root resc of the hier
         std::string root_resc;
         irods::hierarchy_parser parser;
-        parser.set_string( get_hier_out->resc_hier_ );
+        parser.set_string( resc_hier );
         parser.first_resc( root_resc );
         
         // =-=-=-=-=-=-=-
@@ -1897,7 +1840,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         
         strncpy( dst_data_obj.objPath,       itr->name().c_str(),             MAX_NAME_LEN );
         strncpy( dst_data_obj.rescName,      root_resc.c_str(),               NAME_LEN );
-        strncpy( dst_data_obj.rescHier,      get_hier_out->resc_hier_,        MAX_NAME_LEN );
+        strncpy( dst_data_obj.rescHier,      resc_hier.c_str(),               MAX_NAME_LEN );
         strncpy( dst_data_obj.dataType,      itr->type_name( ).c_str(),       NAME_LEN );
         dst_data_obj.dataSize = itr->size( );
         strncpy( dst_data_obj.chksum,        itr->checksum( ).c_str(),        NAME_LEN );
@@ -1960,7 +1903,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // =-=-=-=-=-=-=-
     // redirect_get - code to determine redirection for get operation
     irods::error wosRedirectOpen( 
-        irods::resource_plugin_context&  _ctx,
+        irods::plugin_context&  _ctx,
         irods::plugin_property_map& _prop_map,
         irods::file_object_ptr      _file_obj,
         const std::string&          _resc_name, 
@@ -2011,7 +1954,7 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // used to allow the resource to determine which host
     // should provide the requested operation
     irods::error wosRedirectPlugin( 
-        irods::resource_plugin_context&  _ctx,
+        irods::plugin_context&  _ctx,
         const std::string*                _opr,
         const std::string*                _curr_host,
         irods::hierarchy_parser*         _out_parser,
@@ -2181,42 +2124,103 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
     // of parameters that the microservice takes and the name of the micro
     // service.  this will be called by the plugin loader in the irods server
     // to create the entry to the table when the plugin is requested.
+    extern "C"
     irods::resource* plugin_factory(const std::string& _inst_name, const std::string& _context) {
         wos_resource* resc = new wos_resource( _inst_name, _context );
-        resc->add_operation( irods::RESOURCE_OP_CREATE,       "wosFileCreatePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_OPEN,         "wosFileOpenPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_READ,         "wosFileReadPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_WRITE,        "wosFileWritePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_CLOSE,        "wosFileClosePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_UNLINK,       "wosFileUnlinkPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_STAT,         "wosFileStatPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_FSTAT,        "wosFileFstatPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_LSEEK,        "wosFileLseekPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_FSYNC,        "wosFileFsyncPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_MKDIR,        "wosFileMkdirPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_RMDIR,        "wosFileRmdirPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_OPENDIR,      "wosFileOpendirPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_CLOSEDIR,     "wosFileClosedirPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_READDIR,      "wosFileReaddirPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_RENAME,       "wosFileRenamePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_FREESPACE,    "wosFileGetFsFreeSpacePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_STAGETOCACHE, "wosStageToCachePlugin" );
-        resc->add_operation( irods::RESOURCE_OP_SYNCTOARCH,   "wosSyncToArchPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_REGISTERED,   "wosRegisteredPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_UNREGISTERED, "wosUnregisteredPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_MODIFIED,     "wosModifiedPlugin" );
-        resc->add_operation( irods::RESOURCE_OP_RESOLVE_RESC_HIER, "wosRedirectPlugin" );
+        using namespace irods;
+        using namespace std;
+        resc->add_operation(
+            RESOURCE_OP_CREATE,
+            function<error(plugin_context&)>(
+                wosFileCreatePlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_OPEN,
+            function<error(plugin_context&)>(
+                wosFileOpenPlugin));
+        resc->add_operation<void*,int>(
+            irods::RESOURCE_OP_READ,
+            std::function<
+                error(irods::plugin_context&,void*,int)>(
+                    wosFileReadPlugin));
+        resc->add_operation<void*,int>(
+            irods::RESOURCE_OP_WRITE,
+            function<error(plugin_context&,void*,int)>(
+                wosFileWritePlugin));
+        resc->add_operation(
+            RESOURCE_OP_CLOSE,
+            function<error(plugin_context&)>(
+                wosFileClosePlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_UNLINK,
+            function<error(plugin_context&)>(
+                wosFileUnlinkPlugin));
+        resc->add_operation<struct stat*>(
+            irods::RESOURCE_OP_STAT,
+            function<error(plugin_context&, struct stat*)>(
+                wosFileStatPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_MKDIR,
+            function<error(plugin_context&)>(
+                wosFileMkdirPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_OPENDIR,
+            function<error(plugin_context&)>(
+                wosFileOpendirPlugin));
+        resc->add_operation<struct rodsDirent**>(
+            irods::RESOURCE_OP_READDIR,
+            function<error(plugin_context&,struct rodsDirent**)>(
+                wosFileReaddirPlugin));
+        resc->add_operation<const char*>(
+            irods::RESOURCE_OP_RENAME,
+            function<error(plugin_context&, const char*)>(
+                wosFileRenamePlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_FREESPACE,
+            function<error(plugin_context&)>(
+                wosFileGetFsFreeSpacePlugin));
+        resc->add_operation<long long, int>(
+            irods::RESOURCE_OP_LSEEK,
+            function<error(plugin_context&, long long, int)>(
+                wosFileLseekPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_CLOSEDIR,
+            function<error(plugin_context&)>(
+                wosFileClosedirPlugin));
+        resc->add_operation<const char*>(
+            irods::RESOURCE_OP_STAGETOCACHE,
+            function<error(plugin_context&, const char*)>(
+                wosStageToCachePlugin));
+        resc->add_operation<const char*>(
+            irods::RESOURCE_OP_SYNCTOARCH,
+            function<error(plugin_context&, const char*)>(
+                wosSyncToArchPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_REGISTERED,
+            function<error(plugin_context&)>(
+                wosRegisteredPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_UNREGISTERED,
+            function<error(plugin_context&)>(
+                wosUnregisteredPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_MODIFIED,
+            function<error(plugin_context&)>(
+                wosModifiedPlugin));
+        resc->add_operation(
+            irods::RESOURCE_OP_RMDIR,
+            function<error(plugin_context&)>(
+                wosFileRmdirPlugin));
+        resc->add_operation<const std::string*, const std::string*, irods::hierarchy_parser*, float*>(
+            irods::RESOURCE_OP_RESOLVE_RESC_HIER,
+            function<error(plugin_context&,const std::string*, const std::string*, irods::hierarchy_parser*, float*)>(
+                wosRedirectPlugin));
 
         // set some properties necessary for backporting to iRODS legacy code
-        resc->set_property< int >( "check_path_perm", DO_CHK_PATH_PERM );
-        resc->set_property< int >( "create_path",     NO_CREATE_PATH );
-        resc->set_property< int >( "category",        FILE_CAT );
-
+        resc->set_property< int >( irods::RESOURCE_CHECK_PATH_PERM, DO_CHK_PATH_PERM );
+        resc->set_property< int >( irods::RESOURCE_CREATE_PATH,     CREATE_PATH );
         return dynamic_cast<irods::resource *>( resc );
 
     } // plugin_factory
-
-}; // extern "C" 
 
 
 
