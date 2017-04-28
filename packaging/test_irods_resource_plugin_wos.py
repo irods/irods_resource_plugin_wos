@@ -31,7 +31,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
             admin_session.assert_icommand("iadmin modresc demoResc name origResc", 'STDOUT_SINGLELINE', 'rename', stdin_string='yes\n')
             admin_session.assert_icommand("iadmin mkresc demoResc compound", 'STDOUT_SINGLELINE', 'compound')
             admin_session.assert_icommand("iadmin mkresc cacheResc 'unixfilesystem' "+hostname+":/var/lib/irods/cacheRescVault", 'STDOUT_SINGLELINE', 'cacheResc')
-            admin_session.assert_icommand("iadmin mkresc archiveResc wos "+hostname+":/empty/path wos_host=http://wos.edc.renci.org;wos_policy=Howard", 'STDOUT_SINGLELINE', 'archiveResc')
+            admin_session.assert_icommand("iadmin mkresc archiveResc wos "+hostname+":/empty/path wos_host=http://ddn-wos6000.irods.renci.org;wos_policy=default", 'STDOUT_SINGLELINE', 'archiveResc')
             admin_session.assert_icommand("iadmin addchildtoresc demoResc cacheResc cache")
             admin_session.assert_icommand("iadmin addchildtoresc demoResc archiveResc archive")
         super(Test_Compound_with_WOS_Resource, self).setUp()
@@ -84,7 +84,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
 
     def test_retry_for_put(self):
         # set up
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=2;connect_timeout=5")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=default;retry_count=2;connect_timeout=5")
         filename = "some_test_file.txt"
         filepath = lib.create_local_testfile(filename)
 
@@ -97,7 +97,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         assert( -1 != result.find( "2 of 2" ) )
 
         # clean up
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://ddn-wos6000.irods.renci.org;wos_policy=default")
         os.remove(filepath)
 
     def test_retry_for_get(self):
@@ -108,7 +108,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
         self.admin.assert_icommand("itrim -N1 -n0 "+filename )
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=Howard;retry_count=2;connect_timeout=5")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=default;retry_count=2;connect_timeout=5")
 
         # test it
         self.admin.assert_icommand( "iget -f "+filename, 'STDERR_SINGLELINE', "HIERARCHY_ERROR")
@@ -119,7 +119,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         assert -1 != result.find( "2 of 2" )
 
         # clean up
-        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://wos.edc.renci.org;wos_policy=Howard")
+        self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=http://ddn-wos6000.irods.renci.org;wos_policy=default")
         os.remove(filepath)
 
 
