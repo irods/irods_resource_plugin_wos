@@ -1694,7 +1694,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
                  // returns non-zero on error.
                  if (!status) {
                     // We want to set the new physical path
-                    if( strlen( theHeaders.x_ddn_oid ) > 0 ) {
+                    if( theHeaders.x_ddn_oid && strlen( theHeaders.x_ddn_oid ) > 0 ) {
                         file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
                     } else {
                         result = ERROR( status, "wosSyncToArchPlugin - OID string is empty");
