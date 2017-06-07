@@ -1843,8 +1843,10 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
         // replica and if so register it
         std::string repl_policy;
         ret = _ctx.prop_map().get< std::string >( REPL_POLICY_KEY, repl_policy );
-        if( !ret.ok() ) {
-            return ERROR( INVALID_OBJECT_NAME, "object not found on the archive" );
+        if( ret.ok() ) {
+            if("on" != repl_policy) {
+                return SUCCESS();
+            }
         }
 
         // =-=-=-=-=-=-=-
