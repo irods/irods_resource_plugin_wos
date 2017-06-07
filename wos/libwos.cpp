@@ -1847,6 +1847,8 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
             if("on" != repl_policy) {
                 return SUCCESS();
             }
+        else {
+            return SUCCESS();
         }
 
         // =-=-=-=-=-=-=-
