@@ -1625,24 +1625,6 @@ irods::error wosCheckParams(irods::resource_plugin_context& _ctx ) {
 		    return PASS( ret );
 		}
 
-		bool repl_found = false;
-		uintmax_t file_size;
-		std::vector< irods::physical_object > replicas = file_obj->replicas();
-		for(size_t i = 0; i < replicas.size(); ++i) {
-		    irods::hierarchy_parser p;
-		    p.set_string(replicas[i].resc_hier());
-		    if(p.resc_in_hier(resc_name)) {
-			repl_found = true;
-			file_size = replicas[i].size();
-		    }
-		}
-
-		if(!repl_found) {
-		    return ERROR(
-			       INVALID_OBJECT_NAME,
-			       "object not found on the archive" );
-		}
-             
               // The old code allows user to set a mode.  We should now be doing this.
               status = getTheFile(wos_host, 
                                   file_obj->physical_path().c_str(), 
