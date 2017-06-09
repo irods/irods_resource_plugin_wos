@@ -27,6 +27,10 @@
  * These defines are for the headers used in the WOS rest interface
  */
 ///@{
+
+
+#include "irods_resource_plugin.hpp"
+
 #define WOS_CONTENT_TYPE_HEADER "content-type: application/octet-stream"
 #define WOS_CONTENT_LENGTH_HEADER "content-length: 0"
 #define WOS_CONTENT_LENGTH_PUT_HEADER "content-length: "
@@ -133,7 +137,7 @@ typedef struct WOS_STATISTICS_TYPE {
 extern "C" {
 
 static int 
-putTheFile (const char *resource, const char *policy, const char *file, const char* prev_oid, WOS_HEADERS_P headerP);
+putTheFile (const char *resource, const char *policy, const char *file, const char* prev_oid, irods::plugin_context& _ctx, WOS_HEADERS_P headerP);
 static int 
 getTheFile (const char *resource, const char *file, const char *destination, int mode,
             WOS_HEADERS_P headerP);

@@ -18,6 +18,7 @@
 // =-=-=-=-=-=-=-
 // irods includes
 #include "rsRegReplica.hpp"
+#include "rsModDataObjMeta.hpp"
 
 
 // =-=-=-=-=-=-=-
@@ -36,6 +37,7 @@
 #include "irods_stacktrace.hpp"
 #include "irods_virtual_path.hpp"
 #include "irods_kvp_string_parser.hpp"
+#include "rsRegDataObj.hpp"
 
 // =-=-=-=-=-=-=-
 // stl includes
@@ -276,6 +278,13 @@ static size_t readTheData(void *ptr, size_t size, size_t nmemb, void *stream)
 }
 
 
+/*
+ * This function is no longer being called because we are now registering a zero length file first
+ * and then calling overwriteZeroFile.  
+ *
+ */
+
+/*
 static int 
 putNonZeroFile(
     const char*   resource, 
@@ -418,7 +427,7 @@ putNonZeroFile(
     curl_easy_cleanup(theCurl);
     fclose( sourceFile );
     return (int) res;
-}
+}*/
 
 static int 
 overwriteZeroFile(
@@ -658,6 +667,159 @@ registerZeroFile(
 
 }
 
+
+int getL1DescIndex_for_resc_hier_and_file_path(const std::string &resc_hier, const std::string &file_path) {
+    int my_idx = -1;
+    for(int i = 0; i < NUM_L1_DESC; ++i) {
+       if(FD_INUSE == L1desc[i].inuseFlag) { 
+           dataObjInfo_t* tmp_info = L1desc[i].dataObjInfo;
+           if(tmp_info && strcmp(tmp_info->rescHier, resc_hier.c_str()) == 0 && strcmp(tmp_info->filePath, file_path.c_str())) {
+                   my_idx = i;
+                   break;
+           }
+       }
+    }
+    return my_idx;
+}
+
+/** 
+ * @brief This function registers a zero length replica on the archive
+ *        resource so that the WOS id can be stored in case a failure 
+ *        occurs during saving to WOS.  This allows tracking of WOS objects
+ *        that could otherwise be orphaned.
+ *
+ * @param _ctx The plugin context 
+ * @param _wos_oid A character pointer to the WOS id 
+ * @return res.  An irods::error object.  Either SUCCESS() or whatever error we receive. 
+ */
+irods::error register_replica(irods::plugin_context& _ctx, const char *_wos_oid) {
+
+    irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
+
+    std::vector< irods::physical_object > objs = file_obj->replicas();
+
+    // =-=-=-=-=-=-=-
+    // get our resource id
+    rodsLong_t resc_id = 0;
+    irods::error ret = _ctx.prop_map().get<rodsLong_t>( irods::RESOURCE_ID, resc_id );
+    if( !ret.ok() ) {
+        return PASS( ret );
+    }
+
+    std::string resc_hier;
+    ret = resc_mgr.leaf_id_to_hier(resc_id, resc_hier);
+    if( !ret.ok() ) {
+        return PASS( ret );
+    }
+
+    // =-=-=-=-=-=-=-
+    // get the root resc of the hier
+    std::string root_resc;
+    irods::hierarchy_parser parser;
+    parser.set_string( resc_hier );
+    parser.first_resc( root_resc );
+
+    int max_repl_num = 0;
+    for (auto itr  = objs.begin();
+          itr != objs.end();
+          ++itr ) {
+        if( itr->repl_num() > max_repl_num ) {
+            max_repl_num = itr->repl_num();
+
+        }
+
+    } // for itr
+
+    // =-=-=-=-=-=-=-
+    // build out a dataObjInfo_t struct for use in the call
+    // to rsRegDataObj.
+    // At this point much of the object data will be defaulted as this
+    // is not registering a real object at this time.
+    dataObjInfo_t dst_data_obj;
+    bzero( &dst_data_obj, sizeof( dst_data_obj ) );
+    
+    strncpy( dst_data_obj.objPath,       file_obj->logical_path().c_str(),             MAX_NAME_LEN );
+    strncpy( dst_data_obj.rescName,      root_resc.c_str(),               NAME_LEN );
+    strncpy( dst_data_obj.rescHier,      resc_hier.c_str(),               MAX_NAME_LEN );
+    strncpy( dst_data_obj.dataType,      "generic",       NAME_LEN );
+
+    // at this point we just set the size to 0 to indicate that
+    // the object does not really exist in WOS.
+    dst_data_obj.dataSize = 0; 
+    strncpy( dst_data_obj.filePath,      _wos_oid,                  MAX_NAME_LEN );
+    dst_data_obj.replNum    = max_repl_num+1;
+    dst_data_obj.rescId = resc_id;
+    dst_data_obj.replStatus = 0;
+    dst_data_obj.dataId = file_obj->id(); 
+    dst_data_obj.dataMapId = 0; 
+    dst_data_obj.flags     = 0; 
+
+    // =-=-=-=-=-=-=-
+    // manufacture a src data obj
+    dataObjInfo_t src_data_obj;
+    memcpy( &src_data_obj, &dst_data_obj, sizeof( dst_data_obj ) );
+    src_data_obj.replNum = 0;//file_obj->repl_num();
+    strncpy( src_data_obj.filePath, file_obj->physical_path().c_str(),       MAX_NAME_LEN );
+    strncpy( src_data_obj.rescHier, file_obj->resc_hier().c_str(),  MAX_NAME_LEN );
+    // =-=-=-=-=-=-=-
+    // repl to an existing copy
+    regReplica_t reg_inp;
+    bzero( &reg_inp, sizeof( reg_inp ) );
+    reg_inp.srcDataObjInfo  = &src_data_obj;
+    reg_inp.destDataObjInfo = &dst_data_obj;
+    addKeyVal(&reg_inp.condInput, IN_PDMO_KW, resc_hier.c_str());
+    int status = rsRegReplica( _ctx.comm(), &reg_inp );
+    if( status < 0 ) {
+        return ERROR( status, "failed to register data object" );
+    }
+ 
+    keyValPair_t kvp;
+    memset(&kvp, 0, sizeof(kvp));
+
+    addKeyVal(&kvp, DATA_SIZE_KW, "0");
+    addKeyVal(&kvp, IN_PDMO_KW, resc_hier.c_str());
+
+    modDataObjMeta_t mod_obj_meta;
+    memset( &mod_obj_meta, 0, sizeof(mod_obj_meta));
+    mod_obj_meta.regParam = &kvp;
+    mod_obj_meta.dataObjInfo = &dst_data_obj;
+
+    status = rsModDataObjMeta(_ctx.comm(), &mod_obj_meta);
+
+    if (status < 0) {
+        return ERROR( status, "failed in rsModObjMeta" );
+    }
+
+    // =-=-=-=-=-=-=-
+    // we need to make a physical object and add it to the file_obj
+    // so it can get picked up for the repl operation
+    irods::physical_object phy_obj;
+    phy_obj.resc_hier( dst_data_obj.rescHier );
+    phy_obj.repl_num( dst_data_obj.replNum );
+    objs.push_back( phy_obj );
+    file_obj->replicas( objs );
+
+    // =-=-=-=-=-=-=-
+    // repave resc hier in file object as it is
+    // what is used to determine hierarchy in
+    // the compound resource
+    file_obj->resc_hier( dst_data_obj.rescHier );
+    file_obj->physical_path( dst_data_obj.filePath );
+
+    // to put in getL1Desc(), also add file_path
+    int my_idx = getL1DescIndex_for_resc_hier_and_file_path(resc_hier, dst_data_obj.filePath);
+
+    if(my_idx != -1) {
+        L1desc[my_idx].dataObjInfo->dataSize = 0;
+    }
+    else {
+        return ERROR(SYS_INVALID_INPUT_PARAM, "failed to find my L1desc index");
+    }
+
+    return SUCCESS();
+
+} // register_replica
+
 /** 
  * @brief This function is the high level function that adds a data file
  *        to the DDN storage using the WOS interface.
@@ -677,6 +839,7 @@ static int putTheFile(
     const char*   policy, 
     const char*   file, 
     const char*   prev_oid, 
+    irods::plugin_context& _ctx,
     WOS_HEADERS_P headerP) {
 
     WOS_HEADERS theHeaders;
@@ -730,11 +893,34 @@ static int putTheFile(
                      file,
                      headerP );
     } else {
-        status = putNonZeroFile(
+        // TODO call previous functions 
+        status = registerZeroFile(
                      resource,
                      policy,
                      file,
                      headerP );
+
+        irods::error get_ret = register_replica(_ctx, headerP->x_ddn_oid);
+        if (!get_ret.ok()) {
+            irods::log(get_ret);
+        }
+
+        rodsLog(LOG_NOTICE, "received wos oid - %s", headerP->x_ddn_oid);
+
+        status = overwriteZeroFile(
+                     resource,
+                     policy,
+                     file,
+                     headerP->x_ddn_oid,
+                     headerP );
+
+        rodsLog(LOG_NOTICE, "finished writing to wos oid - %s", headerP->x_ddn_oid);
+
+        /*status = putNonZeroFile(
+                     resource,
+                     policy,
+                     file,
+                     headerP );*/
     }
 
     return status;
@@ -1690,6 +1876,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
                               wos_policy, 
                               (const char *)_cache_file_name, 
                               file_obj->physical_path().c_str(),
+                              _ctx,
                               &theHeaders);
                  // returns non-zero on error.
                  if (!status) {
