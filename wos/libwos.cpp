@@ -694,6 +694,11 @@ int getL1DescIndex_for_resc_hier_and_file_path(const std::string &resc_hier, con
  */
 irods::error register_replica(irods::plugin_context& _ctx, const char *_wos_oid) {
 
+    if(!_wos_oid) {
+        return ERROR(SYS_NULL_INPUT, "null wos oid pointer");
+    }
+
+
     irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
 
     std::vector< irods::physical_object > objs = file_obj->replicas();
@@ -899,6 +904,12 @@ static int putTheFile(
                      policy,
                      file,
                      headerP );
+
+        if(status) {
+            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
+            return status;
+        }
+
 
         irods::error get_ret = register_replica(_ctx, headerP->x_ddn_oid);
         if (!get_ret.ok()) {
