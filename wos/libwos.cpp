@@ -916,12 +916,13 @@ static int putTheFile(
             return status;
         }
 
+
         irods::error get_ret = register_replica(_ctx, headerP->x_ddn_oid);
         if (!get_ret.ok()) {
             irods::log(get_ret);
         }
 
-        rodsLog(LOG_NOTICE, "received wos oid - %s", headerP->x_ddn_oid);
+        rodsLog(LOG_NOTICE, "received wos oid - %s\n", headerP->x_ddn_oid);
 
         status = overwriteZeroFile(
                      resource,
@@ -1255,6 +1256,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
 
    // Make the OID header
    sprintf(oidHeader, "%s %s", WOS_OID_HEADER, file);
+
    
    // Now add the headers
    headers = curl_slist_append(headers, dateHeader);
@@ -1821,6 +1823,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
     irods::error unlink_for_overwrite(
         const char*            _wos_host,
         irods::plugin_context& _ctx) {
+
         irods::file_object_ptr fobj = boost::dynamic_pointer_cast<
             irods::file_object>(
                     _ctx.fco());
@@ -1837,10 +1840,18 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
         if(hp.resc_in_hier(resc_name)) {
             WOS_HEADERS theHeaders;
             memset( &theHeaders, 0, sizeof( theHeaders ) );
-            deleteTheFile(
+
+            std::string vault_path;
+            _ctx.prop_map().get<std::string>(irods::RESOURCE_PATH, vault_path);
+
+            // only delete the file if we have an OID and not a vault_path
+            if (fobj->physical_path().find(vault_path) == std::string::npos) {
+                deleteTheFile(
                     _wos_host,
                     fobj->physical_path().c_str(),
                     &theHeaders);
+            } 
+
         }
 
         return SUCCESS();
@@ -1877,6 +1888,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
 
            if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_host.")).ok()) {
               wos_host = my_host.c_str();
+
               irods::error err = unlink_for_overwrite(wos_host, _ctx);
               if(!err.ok()) {
                   irods::log(err);
