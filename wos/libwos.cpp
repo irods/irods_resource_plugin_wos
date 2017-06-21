@@ -664,7 +664,7 @@ registerZeroFile(
 
 
     rodsLog(
-        LOG_NOTICE, // XXXX - LOG_DEBUG,
+        LOG_DEBUG,
         "In registerZeroFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
@@ -1861,7 +1861,6 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
     irods::error wosSyncToArchPlugin( 
         irods::plugin_context& _ctx,
         const char*            _cache_file_name ) {
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
         int status;
         const char *wos_host = nullptr;
         const char *wos_policy = nullptr;
@@ -1877,7 +1876,6 @@ rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
 
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
@@ -1891,7 +1889,6 @@ rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                   irods::log(err);
               }
 
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
               prop_ret = prop_map.get< std::string >( WOS_POLICY_KEY, my_policy );
               if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
                  wos_policy = my_policy.c_str();
@@ -1903,10 +1900,8 @@ rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                               file_obj->physical_path().c_str(),
                               _ctx,
                               &theHeaders);
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                  // returns non-zero on error.
                  if (!status) {
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                     // We want to set the new physical path
                     if( theHeaders.x_ddn_oid && strlen( theHeaders.x_ddn_oid ) > 0 ) {
                         file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
@@ -1920,7 +1915,6 @@ rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
               }
            }
         }
-rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
 
         return result;
 
