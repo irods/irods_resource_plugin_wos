@@ -911,17 +911,10 @@ static int putTheFile(
                      policy,
                      file,
                      headerP );
-            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
         if(status) {
-            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
+            rodsLog(LOG_ERROR, "putTheFile - registerZeroFile failed [%d]", status);
             return status;
         }
-
-        if(status) {
-            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
-            return status;
-        }
-
 
         irods::error get_ret = register_replica(_ctx, headerP->x_ddn_oid);
         if (!get_ret.ok()) {
