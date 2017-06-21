@@ -638,6 +638,7 @@ registerZeroFile(
     headers = curl_slist_append(headers, dateHeader);
     headers = curl_slist_append(headers, policyHeader);
     headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
+    headers = curl_slist_append(headers, "Content-Length: 0");
 
     // Stuff the headers into the request
     curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
@@ -656,9 +657,14 @@ registerZeroFile(
 
         return (WOS_PUT_ERR);
     }
+
     
+    long http_code = 0;
+    curl_easy_getinfo (theCurl, CURLINFO_RESPONSE_CODE, &http_code);
+
+
     rodsLog(
-        LOG_DEBUG,
+        LOG_NOTICE, // XXXX - LOG_DEBUG,
         "In registerZeroFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
@@ -697,7 +703,6 @@ irods::error register_replica(irods::plugin_context& _ctx, const char *_wos_oid)
     if(!_wos_oid) {
         return ERROR(SYS_NULL_INPUT, "null wos oid pointer");
     }
-
 
     irods::file_object_ptr file_obj = boost::dynamic_pointer_cast< irods::file_object >( _ctx.fco() );
 
@@ -821,6 +826,7 @@ irods::error register_replica(irods::plugin_context& _ctx, const char *_wos_oid)
         return ERROR(SYS_INVALID_INPUT_PARAM, "failed to find my L1desc index");
     }
 
+
     return SUCCESS();
 
 } // register_replica
@@ -846,6 +852,7 @@ static int putTheFile(
     const char*   prev_oid, 
     irods::plugin_context& _ctx,
     WOS_HEADERS_P headerP) {
+
 
     WOS_HEADERS theHeaders;
     memset( &theHeaders, 0, sizeof( theHeaders ) );
@@ -904,6 +911,11 @@ static int putTheFile(
                      policy,
                      file,
                      headerP );
+            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
+        if(status) {
+            rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
+            return status;
+        }
 
         if(status) {
             rodsLog(LOG_ERROR, "putTheFile - regsiterZeroFile failed [%d]", status);
@@ -1849,7 +1861,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
     irods::error wosSyncToArchPlugin( 
         irods::plugin_context& _ctx,
         const char*            _cache_file_name ) {
-
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
         int status;
         const char *wos_host = nullptr;
         const char *wos_policy = nullptr;
@@ -1865,6 +1877,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
         std::ostringstream out_stream;
         irods::error result = SUCCESS();
 
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
         // check incoming parameters
         irods::error ret = wosCheckParams( _ctx );
         if((result = ASSERT_PASS(ret, "Invalid parameters or physical path.")).ok()) {
@@ -1878,6 +1891,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
                   irods::log(err);
               }
 
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
               prop_ret = prop_map.get< std::string >( WOS_POLICY_KEY, my_policy );
               if((result = ASSERT_PASS(prop_ret, "- prop_map has no wos_policy.")).ok()) {
                  wos_policy = my_policy.c_str();
@@ -1889,8 +1903,10 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
                               file_obj->physical_path().c_str(),
                               _ctx,
                               &theHeaders);
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                  // returns non-zero on error.
                  if (!status) {
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
                     // We want to set the new physical path
                     if( theHeaders.x_ddn_oid && strlen( theHeaders.x_ddn_oid ) > 0 ) {
                         file_obj->physical_path(std::string(theHeaders.x_ddn_oid));
@@ -1904,6 +1920,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
               }
            }
         }
+rodsLog(LOG_NOTICE, "XXXX - %s:%d", __FUNCTION__, __LINE__); fflush(stdout);
 
         return result;
 
