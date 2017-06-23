@@ -922,7 +922,7 @@ static int putTheFile(
             irods::log(get_ret);
         }
 
-        rodsLog(LOG_NOTICE, "received wos oid - %s\n", headerP->x_ddn_oid);
+        rodsLog(LOG_DEBUG, "received wos oid - %s\n", headerP->x_ddn_oid);
 
         status = overwriteZeroFile(
                      resource,
@@ -931,7 +931,7 @@ static int putTheFile(
                      headerP->x_ddn_oid,
                      headerP );
 
-        rodsLog(LOG_NOTICE, "finished writing to wos oid - %s", headerP->x_ddn_oid);
+        rodsLog(LOG_DEBUG, "finished writing to wos oid - %s", headerP->x_ddn_oid);
 
         /*status = putNonZeroFile(
                      resource,
