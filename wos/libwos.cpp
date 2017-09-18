@@ -104,7 +104,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
    // for the space, so the string is properly terminated.
    strncpy(theHeader, (char *) ptr, ((size * nmemb)) - 2);
    rodsLog(
-       LOG_DEBUG,
+       LOG_ERROR,
        "readTheHeaders :: %d, %d, %s\n", 
        (int) size, 
        (int) strlen(theHeader), 
@@ -115,7 +115,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
    if( std::string::npos != h_str.find( "HTTP/" ) ) {
        if( std::string::npos != h_str.find( "50" ) ) {
            rodsLog( 
-               LOG_DEBUG, 
+               LOG_ERROR, 
                "readTheHeaders - setting an error [%s]",
                h_str.c_str() );
            theHeaders->http_status = WOS_INTERNAL_ERROR;
@@ -131,9 +131,12 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
       // to the address of theHeader.
       sscanf(theHeader + sizeof(WOS_STATUS_HEADER), 
              "%d %s", &x_ddn_status, x_ddn_status_string);
-      rodsLog(LOG_DEBUG,"code: %d, string: %s\n", x_ddn_status, x_ddn_status_string);
+      rodsLog(LOG_ERROR,"code: %d, string: %s\n", x_ddn_status, x_ddn_status_string);
       theHeaders->x_ddn_status = x_ddn_status;
-      strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
+
+      // Justin - Changed this to get the real status
+      //strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
+      strcpy(theHeaders->x_ddn_status_string, x_ddn_status_string);
    } 
 
    if (!strncasecmp(theHeader, 
@@ -146,7 +149,7 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
       //   (char *) calloc (strlen(WOS_STATUS_HEADER) - sizeof(WOS_OID_HEADER), 1);
       sscanf(theHeader + sizeof(WOS_OID_HEADER), 
              "%s", theHeaders->x_ddn_oid);
-      rodsLog(LOG_DEBUG,"oid: %s\n", theHeaders->x_ddn_oid);
+      rodsLog(LOG_ERROR,"oid: %s\n", theHeaders->x_ddn_oid);
    } 
 
    if (!strncasecmp(theHeader, 
@@ -157,9 +160,11 @@ readTheHeaders(void *ptr, size_t size, size_t nmemb, void *stream) {
       // to the address of theHeader.
       sscanf(theHeader + sizeof(WOS_LENGTH_HEADER), 
              "%ld", &x_ddn_length);
-      rodsLog(LOG_DEBUG,"length: %ld \n", x_ddn_length);
+      rodsLog(LOG_ERROR,"length: %ld \n", x_ddn_length);
       theHeaders->x_ddn_length = x_ddn_length;
-      strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
+
+      // Justin - removed the following at DDN request while troubleshooting
+      //strcpy(theHeaders->x_ddn_status_string, "OK" );//x_ddn_status_string);
    } 
 
    free(theHeader);
@@ -279,14 +284,15 @@ static size_t readTheData(void *ptr, size_t size, size_t nmemb, void *stream)
 
 
 /*
- * This function is no longer being called because we are now registering a zero length file first
- * and then calling overwriteZeroFile.  
+ * This function is called to put a file that is not yet in WOS into WOS.  This
+ * is currently only called for zero length files because for all others we do a 
+ * reservation first and then overwrite the reserved file.
  *
  */
 
-/*
+
 static int 
-putNonZeroFile(
+putNewFile(
     const char*   resource, 
     const char*   policy, 
     const char*   file, 
@@ -337,7 +343,7 @@ putNonZeroFile(
 
     sprintf(theURL, "%s%s", resource, WOS_COMMAND_PUT);
 
-    rodsLog(LOG_DEBUG,"theURL: %s\n", theURL);
+    rodsLog(LOG_DEBUG6,"theURL: %s\n", theURL);
     curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
     // Make the content length header
@@ -359,8 +365,18 @@ putNonZeroFile(
     headers = curl_slist_append(headers, policyHeader);
     headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
 
+    // If the file size is 0, we must add dummy metadata otherwise WOS will
+    // reject the put.
+    if (sourceFileInfo.st_size == 0) {
+        std::string dummyMetadata = "x-ddn-meta:\"zeroSizeObject\":\"true\"";
+        headers = curl_slist_append(headers, dummyMetadata.c_str()); 
+    }
+
     // Stuff the headers into the request
     curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
+
+    rodsLog(LOG_DEBUG6,"CURL_COMMAND_DEBUG - putNewFile - URL: [%s], headers: [%s, %s, %s, %s]\n", theURL,
+            dateHeader, contentLengthHeader, policyHeader, WOS_CONTENT_TYPE_HEADER);
 
     // Open the destination file so the handle can be passed to the
     // read function
@@ -422,15 +438,15 @@ putNonZeroFile(
        }
 
     }
-    rodsLog(LOG_DEBUG,"In putNonZeroFile: code: %d, oid: %s\n", 
+    rodsLog(LOG_DEBUG6,"In putNewFile: code: %d, oid: %s\n", 
             headerP->x_ddn_status, headerP->x_ddn_oid);
     curl_easy_cleanup(theCurl);
     fclose( sourceFile );
     return (int) res;
-}*/
+}
 
 static int 
-overwriteZeroFile(
+overwriteReservedFile(
     const char*   resource, 
     const char*   policy, 
     const char*   file, 
@@ -507,9 +523,12 @@ overwriteZeroFile(
     headers = curl_slist_append(headers, oidHeader);
 
     rodsLog(
-        LOG_DEBUG,
-        "overwriteZeroFile theURL: [%s] type [%s] len [%s] date [%s] oid [%s]\n", 
+        LOG_DEBUG6,
+        "overwriteReservedFile theURL: [%s] type [%s] len [%s] date [%s] oid [%s]\n", 
         theURL, WOS_CONTENT_TYPE_HEADER, contentLengthHeader, dateHeader, oidHeader );
+    rodsLog(LOG_DEBUG6, "CURL_COMMAND_DEBUG - overwriteReservedFile - URL: [%s], headers: [%s, %s, %s, %s]\n", 
+        theURL, WOS_CONTENT_TYPE_HEADER, contentLengthHeader, dateHeader, oidHeader );
+
 
     // Stuff the headers into the request
     curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
@@ -575,8 +594,8 @@ overwriteZeroFile(
 
     }
     rodsLog(
-        LOG_DEBUG,
-        "In overwriteZeroFile: code: %d, oid: %s\n", 
+        LOG_DEBUG6,
+        "In overwriteReservedFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
     curl_easy_cleanup(theCurl);
@@ -586,7 +605,7 @@ overwriteZeroFile(
 }
 
 static int 
-registerZeroFile(
+reserveFile(
     const char*   resource, 
     const char*   policy, 
     const char*   file, 
@@ -628,7 +647,7 @@ registerZeroFile(
 
     sprintf(theURL, "%s%s", resource, WOS_COMMAND_RESERVE);
 
-    rodsLog(LOG_DEBUG,"theURL: %s\n", theURL);
+    rodsLog(LOG_DEBUG6,"theURL: %s\n", theURL);
     curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
     // Make the policy header
@@ -639,6 +658,9 @@ registerZeroFile(
     headers = curl_slist_append(headers, policyHeader);
     headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
     headers = curl_slist_append(headers, "Content-Length: 0");
+
+    rodsLog(LOG_DEBUG6, "CURL_COMMAND DEBUG - registerZeroLengthFile - URL:[%s], headers: [%s, %s, %s, %s]\n", theURL,
+            dateHeader, policyHeader, WOS_CONTENT_TYPE_HEADER, "Content-Length: 0");
 
     // Stuff the headers into the request
     curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
@@ -664,8 +686,8 @@ registerZeroFile(
 
 
     rodsLog(
-        LOG_DEBUG,
-        "In registerZeroFile: code: %d, oid: %s\n", 
+        LOG_DEBUG6,
+        "In reserveFile: code: %d, oid: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_oid);
     curl_easy_cleanup(theCurl);
@@ -872,7 +894,8 @@ static int putTheFile(
 
     // =-=-=-=-=-=-=-
     // stat the WOS file, if it exists on the wos system we need to check 
-    // the size.  a size of 0 requires a different WOS call.
+    // the size.  If it is non-zero, register first to get OID and then overwrite.
+    // If it is zero then just put the file. 
     int status = 1;
     std::string prev_oid_str( prev_oid );
 
@@ -891,7 +914,7 @@ static int putTheFile(
     }
 
     if( file_on_wos && WOS_UNUSED_RESERVATION == theHeaders.x_ddn_status ) {
-        status = overwriteZeroFile(
+        status = overwriteReservedFile(
                      resource,
                      policy,
                      file,
@@ -899,20 +922,27 @@ static int putTheFile(
                      headerP );
     }
     else if( !file_on_wos && 0 == sourceFileInfo.st_size ) {
-        status = registerZeroFile(
+
+        /*status = reserveFile(
+                     resource,
+                     policy,
+                     file,
+                     headerP );*/
+
+        status = putNewFile(
                      resource,
                      policy,
                      file,
                      headerP );
     } else {
         // TODO call previous functions 
-        status = registerZeroFile(
+        status = reserveFile(
                      resource,
                      policy,
                      file,
                      headerP );
         if(status) {
-            rodsLog(LOG_ERROR, "putTheFile - registerZeroFile failed [%d]", status);
+            rodsLog(LOG_ERROR, "putTheFile - reserveFile failed [%d]", status);
             return status;
         }
 
@@ -924,7 +954,7 @@ static int putTheFile(
 
         rodsLog(LOG_DEBUG, "received wos oid - %s\n", headerP->x_ddn_oid);
 
-        status = overwriteZeroFile(
+        status = overwriteReservedFile(
                      resource,
                      policy,
                      file,
@@ -933,11 +963,6 @@ static int putTheFile(
 
         rodsLog(LOG_DEBUG, "finished writing to wos oid - %s", headerP->x_ddn_oid);
 
-        /*status = putNonZeroFile(
-                     resource,
-                     policy,
-                     file,
-                     headerP );*/
     }
 
     return status;
@@ -984,12 +1009,12 @@ static int getTheFile(
     // The headers
     struct curl_slist *headers = NULL;
 
-    rodsLog(LOG_DEBUG, "getting ready to get the file\n");
+    rodsLog(LOG_DEBUG6, "getting ready to get the file\n");
 
     // construct the url from the resource and the file name
     sprintf(theURL, "%s/objects/%s", resource, file);
     rodsLog(
-        LOG_DEBUG, 
+        LOG_DEBUG6, 
         "theURL: %s\n", theURL);
     curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
@@ -1095,7 +1120,7 @@ static int getTheFile(
     } // else
 
     rodsLog(
-        LOG_DEBUG,
+        LOG_DEBUG6,
         "In getTheFile: code: %d, string: %s\n", 
         headerP->x_ddn_status, 
         headerP->x_ddn_status_string);
@@ -1144,7 +1169,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
 
    // construct the url from the resource and the file name
    sprintf(theURL, "%s/objects/%s", resource, file);
-   rodsLog(LOG_DEBUG, "theURL: %s\n", theURL);
+   rodsLog(LOG_DEBUG6, "theURL: %s\n", theURL);
    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
    // Create the date header
@@ -1182,7 +1207,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
    }
 
    rodsLog(
-       LOG_DEBUG, 
+       LOG_DEBUG6, 
        "In getTheFileStatus: code: %d, string: [%s] length: %ld\n", 
        headerP->x_ddn_status, 
        headerP->x_ddn_status_string, 
@@ -1209,7 +1234,7 @@ getTheFileStatus (const char *resource, const char *file, WOS_HEADERS_P headerP)
  */
 static 
 int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP) {
-   rodsLog(LOG_DEBUG,"getting ready to delete the file\n");
+   rodsLog(LOG_DEBUG6,"getting ready to delete the file\n");
 
    CURLcode res;
    CURL *theCurl;
@@ -1237,7 +1262,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    
    // construct the url from the resource and the put command
    sprintf(theURL, "%s%s", resource, WOS_COMMAND_DELETE);
-   rodsLog(LOG_DEBUG, "theURL: %s\n", theURL);
+   rodsLog(LOG_DEBUG6, "theURL: %s\n", theURL);
    curl_easy_setopt(theCurl, CURLOPT_URL, theURL);
 
    // Let's not dump the header or be verbose
@@ -1263,7 +1288,10 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
    headers = curl_slist_append(headers, contentLengthHeader);
    headers = curl_slist_append(headers, oidHeader);
    headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
-   
+  
+   rodsLog(LOG_DEBUG6, "CURL_COMMAND_DEBUG - deleteTheFile - URL: [%s], headers: [%s, %s, %s, %s]\n", 
+           theURL, dateHeader, contentLengthHeader, oidHeader, WOS_CONTENT_TYPE_HEADER);
+
    // Stuff the headers into the request
    curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
    while( !put_done_flg && ( retry_cnt < RETRY_COUNT ) ) {
@@ -1308,7 +1336,7 @@ int deleteTheFile (const char *resource, const char *file, WOS_HEADERS_P headerP
        return (WOS_UNLINK_ERR);
    }
 
-   rodsLog(LOG_DEBUG, "In deleteTheFile: code: %d, oid: %s\n", 
+   rodsLog(LOG_DEBUG6, "In deleteTheFile: code: %d, oid: %s\n", 
            headerP->x_ddn_status, headerP->x_ddn_oid);
    curl_easy_cleanup(theCurl);
    return (int) res;
@@ -1619,7 +1647,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
               irods::data_object_ptr object = boost::dynamic_pointer_cast< irods::data_object >( _ctx.fco() );
 
              rodsLog( 
-                 LOG_DEBUG,
+                 LOG_DEBUG6,
                  "wosFileStatPlugin :: [%s]",
                  object->physical_path().c_str() );
 
@@ -2269,7 +2297,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
             // =-=-=-=-=-=-=-
             // parse context string into property pairs assuming a ; as a separator
             std::vector< std::string > props;
-            rodsLog( LOG_DEBUG, "wos context: %s", _context.c_str());
+            rodsLog( LOG_DEBUG6, "wos context: %s", _context.c_str());
             irods::kvp_map_t kvp;
             irods::parse_kvp_string(
                 _context,
@@ -2361,7 +2389,7 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
 
 
         ~wos_resource() {
-             rodsLog( LOG_DEBUG, "calling WOS destructor" );
+             rodsLog( LOG_DEBUG6, "calling WOS destructor" );
         }
 
     }; // class wos_resource
