@@ -348,17 +348,16 @@ putNewFile(
     headers = curl_slist_append(headers, WOS_CONTENT_TYPE_HEADER);
 
     // Put the irods object reference in metadata
-   
-    char metadata[MAX_NAME_LEN];
-    snprintf(metadata, MAX_NAME_LEN, "x-ddn-meta:\"irodsObject\":\"%s\", \"pid\": \"%d\", \"time\": \"%ld\"", file, getpid(), time(NULL));
-    headers = curl_slist_append(headers, metadata);
+    //char metadata[MAX_NAME_LEN];
+    //snprintf(metadata, MAX_NAME_LEN, "x-ddn-meta:\"irodsObject\":\"%s\", \"pid\": \"%d\", \"time\": \"%ld\"", file, getpid(), time(NULL));
+    //headers = curl_slist_append(headers, metadata);
 
     // If the file size is 0, we must add dummy metadata otherwise WOS will
     // reject the put.
-    //if (file_size == 0) {
-    //    std::string dummyMetadata = "x-ddn-meta:\"zeroSizeObject\":\"true\"";
-    //    headers = curl_slist_append(headers, dummyMetadata.c_str()); 
-    //}
+    if (file_size == 0) {
+        std::string dummyMetadata = "x-ddn-meta:\"zeroSizeObject\":\"true\"";
+        headers = curl_slist_append(headers, dummyMetadata.c_str()); 
+    }
 
     // Stuff the headers into the request
     curl_easy_setopt(theCurl, CURLOPT_HTTPHEADER, headers);
