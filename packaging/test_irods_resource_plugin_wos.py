@@ -5,6 +5,7 @@ import shutil
 import socket
 import subprocess
 import imp
+import contextlib
 
 import sys
 if sys.version_info >= (2,7):
@@ -12,23 +13,26 @@ if sys.version_info >= (2,7):
 else:
     import unittest2 as unittest
 
-import lib
+from .. import lib
+from . import session
 import resource_suite
 from test_chunkydevtest import ChunkyDevTest
+from ..configuration import IrodsConfig
+from ..test.command import assert_command
 
-pydevtestdir = os.path.dirname(os.path.realpath(__file__))
-topdir = os.path.dirname(os.path.dirname(pydevtestdir))
-packagingdir = os.path.join(topdir, 'packaging')
-module_tuple = imp.find_module('server_config', [packagingdir])
-imp.load_module('server_config', *module_tuple)
+#pydevtestdir = os.path.dirname(os.path.realpath(__file__))
+#topdir = os.path.dirname(os.path.dirname(pydevtestdir))
+#packagingdir = os.path.join(topdir, 'packaging')
+#module_tuple = imp.find_module('server_config', [packagingdir])
+#imp.load_module('server_config', *module_tuple)
 
-from server_config import ServerConfig
+#from server_config import ServerConfig
 
 class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTest, unittest.TestCase):
     def setUp(self):
         hostname = lib.get_hostname()
-        with lib.make_session_for_existing_admin() as admin_session:
-            admin_session.assert_icommand("iadmin modresc demoResc name origResc", 'STDOUT_SINGLELINE', 'rename', stdin_string='yes\n')
+        with session.make_session_for_existing_admin() as admin_session:
+            admin_session.assert_icommand("iadmin modresc demoResc name origResc", 'STDOUT_SINGLELINE', 'rename', input='yes\n')
             admin_session.assert_icommand("iadmin mkresc demoResc compound", 'STDOUT_SINGLELINE', 'compound')
             admin_session.assert_icommand("iadmin mkresc cacheResc 'unixfilesystem' "+hostname+":/var/lib/irods/cacheRescVault", 'STDOUT_SINGLELINE', 'cacheResc')
             admin_session.assert_icommand("iadmin mkresc archiveResc wos "+hostname+":/empty/path wos_host=http://ddn-wos6000.irods.renci.org;wos_policy=default", 'STDOUT_SINGLELINE', 'archiveResc')
@@ -38,15 +42,16 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
 
     def tearDown(self):
         super(Test_Compound_with_WOS_Resource, self).tearDown()
-        with lib.make_session_for_existing_admin() as admin_session:
+        with session.make_session_for_existing_admin() as admin_session:
             admin_session.assert_icommand("iadmin rmchildfromresc demoResc archiveResc")
             admin_session.assert_icommand("iadmin rmchildfromresc demoResc cacheResc")
             admin_session.assert_icommand("iadmin rmresc archiveResc")
             admin_session.assert_icommand("iadmin rmresc cacheResc")
             admin_session.assert_icommand("iadmin rmresc demoResc")
-            admin_session.assert_icommand("iadmin modresc origResc name demoResc", 'STDOUT_SINGLELINE', 'rename', stdin_string='yes\n')
-        shutil.rmtree(lib.get_irods_top_level_dir() + "/archiveRescVault", ignore_errors=True)
-        shutil.rmtree(lib.get_irods_top_level_dir() + "/cacheRescVault", ignore_errors=True)
+            admin_session.assert_icommand("iadmin modresc origResc name demoResc", 'STDOUT_SINGLELINE', 'rename', input='yes\n')
+        irods_config = IrodsConfig()
+        shutil.rmtree(irods_config.irods_directory + "/archiveRescVault", ignore_errors=True)
+        shutil.rmtree(irods_config.irods_directory + "/cacheRescVault", ignore_errors=True)
 
     def test_itrim__issue_1575(self):
         filename = "some_test_file_1575.txt"
@@ -55,29 +60,44 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand("iput "+filename)
         self.admin.assert_icommand("ils -L "+filename, 'STDOUT_SINGLELINE', filename)
 
-        session_path = lib.get_vault_session_path(self.admin,'cacheResc')
-        cache_phy_path = os.path.join(lib.get_vault_session_path(self.admin,'cacheResc'), filename)
-        lib.assert_command("rm "+cache_phy_path)
-        lib.assert_command("touch "+cache_phy_path)
+        #session_path = lib.get_vault_session_path(self.admin,'cacheResc')
+        session_path = self.admin.get_vault_session_path(resource='cacheResc')
+        #cache_phy_path = os.path.join(lib.get_vault_session_path(self.admin,'cacheResc'), filename)
+        cache_phy_path = os.path.join(session_path, filename)
+        assert_command("rm "+cache_phy_path)
+        assert_command("touch "+cache_phy_path)
+
+
 
         # zero out the file size in the catalog
-        cfg = ServerConfig()
-        cfg.exec_sql_cmd('update r_data_main set data_size = 0 where data_repl_num = 0 and data_name = "%s"' % filename)
+        from .. import database_connect
+        cfg = IrodsConfig()
+        with contextlib.closing(database_connect.get_database_connection(cfg)) as connection:
+            with contextlib.closing(connection.cursor()) as cursor:
+                pass
+                cursor.execute("update r_data_main set data_size = 0 where data_repl_num = 0 and data_name = '%s'" % filename)
+                cursor.commit()
 
-        self.admin.assert_icommand('itrim -N1 -n0 '+filename )
+        #cfg = ServerConfig()
+        #cfg.exec_sql_cmd('update r_data_main set data_size = 0 where data_repl_num = 0 and data_name = "%s"' % filename)
+
+        self.admin.assert_icommand('itrim -N1 -n0 '+filename, 'STDOUT_SINGLELINE', 'Number of files trimmed')
 
     def test_empty_files(self):
         # set up
         filename = "some_test_file.txt"
         filepath = lib.create_local_testfile(filename)
 
+        test_file_size = os.path.getsize(filename) 
+
         emptyfile = "emptyfile.txt"
-        lib.assert_command("touch "+emptyfile)
+        assert_command("touch "+emptyfile)
 
         # test it
         self.admin.assert_icommand("iput "+emptyfile)
         self.admin.assert_icommand("iput -f "+filepath+" "+emptyfile)
-        self.admin.assert_icommand("ils -L "+" "+emptyfile,"STDOUT_MULTILINE",[" 0 demoResc;cacheResc           63 ", " 1 demoResc;archiveResc           63 "])
+        #self.admin.assert_icommand("ils -L "+" "+emptyfile,"STDOUT_MULTILINE",[" 0 demoResc;cacheResc           47 ", " 1 demoResc;archiveResc           47 "])
+        self.admin.assert_icommand("ils -L "+" "+emptyfile,"STDOUT_MULTILINE",[" 0 demoResc;cacheResc %s " % str(test_file_size).rjust(12), " 1 demoResc;archiveResc %s " % str(test_file_size).rjust(12)])
 
         os.remove(filepath)
         os.remove(emptyfile)
@@ -92,7 +112,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand( "iput -f "+filepath, 'STDERR_SINGLELINE', "WOS_PUT_ERR")
 
         # verify it
-        p = subprocess.Popen(['grep "WOS_PUT_ERR"  ../../iRODS/server/log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
+        p = subprocess.Popen(['grep "WOS_PUT_ERR" log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
         result = p.communicate()[0]
         assert( -1 != result.find( "2 of 2" ) )
 
@@ -106,7 +126,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         filepath = lib.create_local_testfile(filename)
         self.admin.assert_icommand("iput "+filepath )
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
-        self.admin.assert_icommand("itrim -N1 -n0 "+filename )
+        self.admin.assert_icommand("itrim -N1 -n0 "+filename, 'STDOUT_SINGLELINE', "files trimmed")
         self.admin.assert_icommand("ils -l", 'STDOUT_SINGLELINE', "tempZone")
         self.admin.assert_icommand("iadmin modresc archiveResc context wos_host=XXXX;wos_policy=default;retry_count=2;connect_timeout=5")
 
@@ -114,7 +134,7 @@ class Test_Compound_with_WOS_Resource(resource_suite.ResourceSuite, ChunkyDevTes
         self.admin.assert_icommand( "iget -f "+filename, 'STDERR_SINGLELINE', "HIERARCHY_ERROR")
 
         # verify it
-        p = subprocess.Popen(['grep "WOS_GET_ERR"  ../../iRODS/server/log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
+        p = subprocess.Popen(['grep "WOS_GET_ERR"  log/rodsLog.* | grep "2 of 2"'], shell=True, stdout=subprocess.PIPE)
         result = p.communicate()[0]
         assert -1 != result.find( "2 of 2" )
 
