@@ -917,6 +917,7 @@ static int putTheFile(
         }
 
         rodsLog(LOG_DEBUG, "received wos oid - %s\n", headerP->x_ddn_oid);
+
         status = overwriteReservedFile(
                      resource,
                      policy,
@@ -925,6 +926,7 @@ static int putTheFile(
                      headerP );
 
         rodsLog(LOG_DEBUG, "finished writing to wos oid - %s", headerP->x_ddn_oid);
+
     }
 
     return status;
