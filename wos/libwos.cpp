@@ -2188,18 +2188,18 @@ irods::error wosCheckParams(irods::plugin_context& _ctx ) {
                  
                  // consider registration of object on WOS if it is not already but only if we are on the current host
                  if ( _curr_host == host_name ) {
-	             get_ret = register_archive_object( 
-				       _ctx,
-				       _file_obj );
+                     get_ret = register_archive_object( 
+                                       _ctx,
+                                       _file_obj );
 
-	             if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - register_archive_object failed")).ok()) {
-	                 // =-=-=-=-=-=-=-
-	                 // vote higher if we are on the same host
-		         if( _curr_host == host_name ) {
-		             _out_vote = 1.0;
-		         } //else {
-		         //    _out_vote = 0.5;
-	                 //}
+                     if((result = ASSERT_PASS(get_ret, "wosRedirectOpen - register_archive_object failed")).ok()) {
+                         // =-=-=-=-=-=-=-
+                         // vote higher if we are on the same host
+                         if( _curr_host == host_name ) {
+                             _out_vote = 1.0;
+                         } //else {
+                         //    _out_vote = 0.5;
+                         //}
                      }
                  
                  }
