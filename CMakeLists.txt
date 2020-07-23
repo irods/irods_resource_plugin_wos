@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5.0 FATAL_ERROR) #CPACK_DEBIAN_<COMPONENT>_PACKAGE_NAME
 
-find_package(IRODS 4.2.2 EXACT REQUIRED)
+find_package(IRODS 4.2.8 EXACT REQUIRED)
+set(IRODS_PLUGIN_REVISION "0")
 
 if (NOT IRODS_EXTERNALS_PACKAGE_ROOT)
   set(IRODS_EXTERNALS_PACKAGE_ROOT "/opt/irods-externals" CACHE STRING "Choose the location of iRODS external packages." FORCE)
@@ -32,10 +33,7 @@ project(irods-wos C CXX)
 
 include(${IRODS_TARGETS_PATH})
 
-set(IRODS_PLUGIN_VERSION_MAJOR "2")
-set(IRODS_PLUGIN_VERSION_MINOR "0")
-set(IRODS_PLUGIN_VERSION_PATCH "0")
-set(IRODS_PLUGIN_VERSION "${IRODS_PLUGIN_VERSION_MAJOR}.${IRODS_PLUGIN_VERSION_MINOR}.${IRODS_PLUGIN_VERSION_PATCH}")
+set(IRODS_PLUGIN_VERSION "${IRODS_VERSION}.${IRODS_PLUGIN_REVISION}")
 
 if (NOT CPACK_PACKAGING_INSTALL_PREFIX)
   set(CPACK_PACKAGING_INSTALL_PREFIX "/" CACHE STRING "Package root path. \"/\" is correct for normal package builds.." FORCE)
@@ -52,10 +50,9 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++ -Wl,-
 add_compile_options(-nostdinc++ -Wall -Wextra -Werror)
 add_compile_options(-Wno-unused-parameter) # Until fix of irods_re_plugin.hpp
 add_compile_options(-Wno-unneeded-internal-declaration) # Until fix of https://github.com/irods/irods/issues/3396
-link_libraries(c++abi
-               ${IRODS_EXTERNALS_PACKAGE_ROOT}/jansson2.7-0/lib/libjansson.so)
+link_libraries(c++abi)
 include_directories(${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
-                    ${IRODS_EXTERNALS_PACKAGE_ROOT}/jansson2.7-0/include)
+                    ${IRODS_EXTERNALS_FULLPATH_JSON}/include)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH ${IRODS_EXTERNALS_FULLPATH_CLANG_RUNTIME}/lib)
